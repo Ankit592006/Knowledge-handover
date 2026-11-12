@@ -1,0 +1,66 @@
+# =============================================================================
+# Render Blueprint (render.yaml) — One-Click Full-Stack Deployment
+# Deploys:
+#   1. kh-postgres (Managed PostgreSQL Database)
+#   2. kh-backend  (FastAPI + LangGraph Python Web Service)
+#   3. kh-frontend (React + TypeScript + Vite Static Site)
+# =============================================================================
+
+databases:
+  - name: kh-postgres
+    databaseName: knowledge_handover
+    user: kh_user
+    plan: free
+
+services:
+  # 1. FastAPI + LangGraph Backend Web Service
+  - type: web
+    name: kh-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: APP_ENV
+        value: "production"
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kh-postgres
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+      # Set LLM_PROVIDER to "openai_compatible" and add LLM_BASE_URL + LLM_API_KEY in Render Dashboard
+      # (e.g., Groq https://api.groq.com/openai/v1 with llama-3.3-70b-versatile or qwen-2.5-32b)
+      # Defaults safely to deterministic_extractive if no external LLM key is provided.
+      - key: LLM_PROVIDER
+        value: "deterministic_extractive"
+      - key: LLM_BASE_URL
+        value: "https://api.groq.com/openai/v1"
+      - key: LLM_MODEL_NAME
+        value: "llama-3.3-70b-versatile"
+
+  # 2. React + Vite Frontend Static Site
+  - type: web
+    name: kh-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: kh-backend
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

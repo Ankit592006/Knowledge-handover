@@ -30,7 +30,7 @@ except ImportError:
 
 
 class EmbeddingVectorType(TypeDecorator):
-    """Cross-dialect vector column: uses native pgvector VECTOR(dim) on PostgreSQL and JSON array on SQLite."""
+    """Cross-dialect vector column: compatible with both PostgreSQL (with or without pgvector) and SQLite."""
 
     impl = JSON
     cache_ok = True
@@ -40,8 +40,6 @@ class EmbeddingVectorType(TypeDecorator):
         self.dim = dim
 
     def load_dialect_impl(self, dialect: Any) -> Any:
-        if dialect.name == "postgresql" and PgVector is not None:
-            return dialect.type_descriptor(PgVector(self.dim))
         return dialect.type_descriptor(JSON())
 
 

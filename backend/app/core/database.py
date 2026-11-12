@@ -7,19 +7,20 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from app.core.config import get_settings
 
 settings = get_settings()
+db_url = settings.normalized_database_url
 
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True,
 )
 
 # Enable SQLite foreign keys when running in local/test SQLite mode
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
@@ -44,10 +45,13 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Initialize database extensions (pgvector on Postgres) and create tables if needed."""
+    """Initialize database extensions (pgvector on Postgres if available) and create tables."""
     if settings.is_postgres:
-        with engine.begin() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    # Import all models to register metadata
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except Exception:
+            # Managed Postgres instances without superuser CREATE EXTENSION privilege will continue safely
+            pass
     import app.models.entities  # noqa: F401
     Base.metadata.create_all(bind=engine)

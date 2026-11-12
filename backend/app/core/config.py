@@ -1,4 +1,4 @@
-"""Application configuration management using Pydantic Settings."""
+"""Application configuration management using Pydantic Settings (Render & Cloud Production Ready)."""
 
 from functools import lru_cache
 from typing import List
@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 
-    # Database (defaults to local SQLite for zero-friction local runs if PostgreSQL is not explicitly configured,
-    # while docker-compose and production use postgresql+psycopg with pgvector)
+    # Database (defaults to local SQLite for zero-friction local runs if PostgreSQL is not explicitly configured;
+    # automatically normalizes Render's postgres:// or postgresql:// URLs to postgresql+psycopg://)
     DATABASE_URL: str = "sqlite:///./knowledge_handover_dev.db"
 
     # Security & Authentication
@@ -33,8 +33,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Open-Source AI & RAG Configuration
+    # Supported LLM_PROVIDER values: "ollama", "openai_compatible", "deterministic_extractive"
+    # For Render / cloud hosting with open-source models (e.g. Groq, Together, OpenRouter, vLLM):
+    # Set LLM_PROVIDER="openai_compatible", LLM_BASE_URL="https://api.groq.com/openai", LLM_API_KEY="gsk_..."
     LLM_PROVIDER: str = "ollama"
     LLM_BASE_URL: str = "http://localhost:11434"
+    LLM_API_KEY: str = ""
     LLM_MODEL_NAME: str = "qwen2.5:7b-instruct"
     LLM_TIMEOUT_SECONDS: int = 45
     LLM_MAX_RETRIES: int = 2
@@ -49,12 +53,25 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
 
     @property
+    def normalized_database_url(self) -> str:
+        """Normalize Render's postgres:// or postgresql:// connection strings to SQLAlchemy psycopg v3 driver."""
+        url = self.DATABASE_URL.strip()
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql://") and "+psycopg" not in url:
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
+    @property
     def cors_origin_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        if "*" in origins:
+            return ["*"]
+        return origins
 
     @property
     def is_postgres(self) -> bool:
-        return self.DATABASE_URL.startswith("postgresql")
+        return self.normalized_database_url.startswith("postgresql")
 
 
 @lru_cache()

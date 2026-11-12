@@ -1,6 +1,5 @@
-"""Open-Source Model Adapter Abstraction (Ollama / Local OpenAI-Compatible / Disclosed Extractive Engine)."""
+"""Open-Source Model Adapter Abstraction (Ollama / Cloud OpenAI-Compatible / Disclosed Extractive Engine)."""
 
-import json
 import time
 from typing import Any, Callable, Dict, Tuple, Type, TypeVar
 import httpx
@@ -28,9 +27,12 @@ def invoke_structured_model(
     deterministic_extractor: Callable[[], T],
 ) -> Tuple[T, ModelExecutionMetadata]:
     """
-    Attempt live open-source LLM inference via Ollama / OpenAI-compatible local runtime with strict JSON schema validation.
-    If no local LLM server is reachable on the host (or provider is set to deterministic_extractive), execute the
-    evidence-grounded extractive engine and transparently record the exact provider in telemetry.
+    Attempt live open-source LLM inference via:
+      1. Local Ollama runtime (LLM_PROVIDER="ollama")
+      2. Cloud or self-hosted OpenAI-compatible open-source runtime such as Groq, Together, vLLM, or OpenRouter
+         (LLM_PROVIDER="openai_compatible", LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_NAME)
+    If no LLM server is configured or reachable, execute the evidence-grounded extractive engine and transparently
+    record the exact provider in telemetry.
     """
     start_ts = time.perf_counter()
     provider_req = settings.LLM_PROVIDER.lower()
@@ -49,7 +51,7 @@ def invoke_structured_model(
                     "stream": False,
                     "options": {"temperature": 0.0},
                 }
-                with httpx.Client(timeout=min(settings.LLM_TIMEOUT_SECONDS, 4.0)) as client:
+                with httpx.Client(timeout=min(settings.LLM_TIMEOUT_SECONDS, 6.0)) as client:
                     resp = client.post(url, json=payload)
                     resp.raise_for_status()
                     raw_json = resp.json().get("message", {}).get("content", "{}")
@@ -63,18 +65,26 @@ def invoke_structured_model(
                         latency_ms=elapsed,
                     )
             else:
-                url = f"{settings.LLM_BASE_URL.rstrip('/')}/v1/chat/completions"
+                base = settings.LLM_BASE_URL.rstrip("/")
+                url = f"{base}/chat/completions" if base.endswith("/v1") else f"{base}/v1/chat/completions"
+                headers: Dict[str, str] = {"Content-Type": "application/json"}
+                if settings.LLM_API_KEY:
+                    headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
+                schema_hint = (
+                    f"\n\nYou MUST output a valid JSON object matching this exact JSON Schema:\n"
+                    f"{response_schema.model_json_schema()}"
+                )
                 payload = {
                     "model": settings.LLM_MODEL_NAME,
                     "messages": [
-                        {"role": "system", "content": system_prompt},
+                        {"role": "system", "content": system_prompt + schema_hint},
                         {"role": "user", "content": user_prompt},
                     ],
                     "response_format": {"type": "json_object"},
                     "temperature": 0.0,
                 }
-                with httpx.Client(timeout=min(settings.LLM_TIMEOUT_SECONDS, 4.0)) as client:
-                    resp = client.post(url, json=payload)
+                with httpx.Client(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
+                    resp = client.post(url, headers=headers, json=payload)
                     resp.raise_for_status()
                     raw_json = resp.json()["choices"][0]["message"]["content"]
                     parsed = response_schema.model_validate_json(raw_json)
@@ -87,7 +97,7 @@ def invoke_structured_model(
                         latency_ms=elapsed,
                     )
         except Exception as exc:
-            fallback_reason = f"Local runtime ({settings.LLM_BASE_URL}) unavailable or schema mismatch: {type(exc).__name__}"
+            fallback_reason = f"LLM runtime ({settings.LLM_BASE_URL}) unavailable or schema mismatch: {type(exc).__name__}"
             result = deterministic_extractor()
             elapsed = round((time.perf_counter() - start_ts) * 1000, 2)
             return result, ModelExecutionMetadata(
