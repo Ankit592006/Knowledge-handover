@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: kh_postgres_pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kh_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kh_dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_handover}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - kh_pgdata:/var/lib/postgresql/data
+      - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/01_init_pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kh_user} -d ${POSTGRES_DB:-knowledge_handover}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kh_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-kh_user}:${POSTGRES_PASSWORD:-kh_dev_password_change_me}@db:5432/${POSTGRES_DB:-knowledge_handover}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev_only_replace_with_32_byte_random_secret_key_012345}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-qwen2.5:7b-instruct}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-deterministic_hash}
+      CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kh_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+
+volumes:
+  kh_pgdata:
