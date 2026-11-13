@@ -1,22 +1,23 @@
 # =============================================================================
-# Render Blueprint (render.yaml) — One-Click Full-Stack Deployment
-# Deploys:
-#   1. kh-postgres (Managed PostgreSQL Database)
-#   2. kh-backend  (FastAPI + LangGraph Python Web Service)
-#   3. kh-frontend (React + TypeScript + Vite Static Site)
+# Render Blueprint (render.yaml) — Isolated Deployment for `preeti-dev` Branch
+# Deploys isolated resources that do NOT overwrite or collide with `main`:
+#   1. kh-postgres-preeti-dev (Managed PostgreSQL + pgvector Database)
+#   2. kh-backend-preeti-dev  (FastAPI + LangGraph Python Web Service)
+#   3. kh-frontend-preeti-dev (React + TypeScript + Vite Static Site)
 # =============================================================================
 
 databases:
-  - name: kh-postgres
-    databaseName: knowledge_handover
-    user: kh_user
+  - name: kh-postgres-preeti-dev
+    databaseName: knowledge_handover_preeti_dev
+    user: kh_user_preeti_dev
     plan: free
 
 services:
-  # 1. FastAPI + LangGraph Backend Web Service
+  # 1. FastAPI + LangGraph Backend Web Service (preeti-dev branch)
   - type: web
-    name: kh-backend
+    name: kh-backend-preeti-dev
     runtime: python
+    branch: preeti-dev
     rootDir: backend
     plan: free
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
@@ -31,7 +32,7 @@ services:
         value: "false"
       - key: DATABASE_URL
         fromDatabase:
-          name: kh-postgres
+          name: kh-postgres-preeti-dev
           property: connectionString
       - key: JWT_SECRET_KEY
         generateValue: true
@@ -46,21 +47,29 @@ services:
         value: "https://api.groq.com/openai/v1"
       - key: LLM_MODEL_NAME
         value: "llama-3.3-70b-versatile"
+      - key: EMBEDDING_PROVIDER
+        value: "deterministic_hash"
+      - key: EMBEDDING_MODEL_NAME
+        value: "all-MiniLM-L6-v2"
+      - key: EMBEDDING_DIMENSION
+        value: "384"
 
-  # 2. React + Vite Frontend Static Site
+  # 2. React + Vite Frontend Static Site (preeti-dev branch)
   - type: web
-    name: kh-frontend
+    name: kh-frontend-preeti-dev
     runtime: static
+    branch: preeti-dev
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE_URL
         fromService:
           type: web
-          name: kh-backend
+          name: kh-backend-preeti-dev
           envVarKey: RENDER_EXTERNAL_URL
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
+
