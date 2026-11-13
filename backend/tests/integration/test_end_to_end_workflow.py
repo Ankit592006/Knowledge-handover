@@ -340,3 +340,329 @@ def test_complete_end_to_end_handover_journey_and_security_controls() -> None:
         )
         assert export_md.status_code == 200
         assert "Prioritised Next Actions" in export_md.json()["content"]
+
+
+def test_sec01_admin_project_isolation_explicit_clearance_and_guest_demo_workflow() -> None:
+    """
+    Verifies SEC-01 fixes:
+    1. Public self-registration cannot assign platform_role=ADMIN or GUEST_DEMO (always assigns STANDARD).
+    2. Only trusted provisioning or an existing authorized Platform ADMIN can create ADMIN accounts.
+    3. Platform ADMIN has no implicit project membership and no implicit RESTRICTED clearance.
+    4. Explicit project membership and actual classification clearance are enforced for all resources.
+    5. Legitimate ADMIN operations (user listing, global audit logs, explicit member assignment, admin provisioning) are preserved and audited.
+    6. Unauthenticated Incognito Guest Demo workflow works via read-only GUEST_DEMO role limited strictly to synthetic PayFlow data.
+    7. Guest Demo cannot access RESTRICTED evidence, other projects, or write/admin operations.
+    """
+    from app.core.database import SessionLocal
+    from app.models.enums import PlatformRole
+    from app.modules.auth.service import provision_admin_user
+    from app.schemas.api_schemas import AdminUserCreateRequest
+
+    with TestClient(app) as client:
+        # 1. Register a Project Lead via public registration (defaults to STANDARD)
+        lead_reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": _unique_email("sec01.lead"),
+                "password": "StrongPassword!123",
+                "full_name": "Sec01 Private Project Lead",
+            },
+        )
+        assert lead_reg.status_code == 201
+        assert lead_reg.json()["user"]["platform_role"] == "STANDARD"
+        lead_token = lead_reg.json()["access_token"]
+
+        # 2. Prove public self-registration with platform_role=ADMIN is blocked (403 Forbidden)
+        illegal_admin_self_reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": _unique_email("illegal.admin"),
+                "password": "StrongPassword!123",
+                "full_name": "Unauthorized Self-Registered Admin",
+                "platform_role": "ADMIN",
+            },
+        )
+        assert illegal_admin_self_reg.status_code == 403
+
+        # Prove non-admin STANDARD user cannot call POST /api/v1/users/admin
+        illegal_admin_create = client.post(
+            "/api/v1/users/admin",
+            headers=_auth_header(lead_token),
+            json={
+                "email": _unique_email("illegal.admin2"),
+                "password": "StrongPassword!123",
+                "full_name": "Unauthorized Provisioned Admin",
+                "platform_role": "ADMIN",
+            },
+        )
+        assert illegal_admin_create.status_code == 403
+
+        # 3. Provision a legitimate Platform ADMIN via trusted provisioning process
+        admin_email = _unique_email("sec01.admin")
+        with SessionLocal() as db:
+            admin_user_resp = provision_admin_user(
+                db,
+                AdminUserCreateRequest(
+                    email=admin_email,
+                    password="StrongPassword!123",
+                    full_name="Sec01 Platform Admin",
+                    platform_role=PlatformRole.ADMIN,
+                ),
+            )
+            admin_id = admin_user_resp.id
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": admin_email, "password": "StrongPassword!123"},
+        )
+        assert admin_login.status_code == 200
+        assert admin_login.json()["user"]["platform_role"] == "ADMIN"
+        admin_token = admin_login.json()["access_token"]
+
+        # Prove existing authorized ADMIN can provision another ADMIN account via POST /api/v1/users/admin
+        second_admin_resp = client.post(
+            "/api/v1/users/admin",
+            headers=_auth_header(admin_token),
+            json={
+                "email": _unique_email("sec01.admin2"),
+                "password": "StrongPassword!123",
+                "full_name": "Secondary Platform Admin",
+                "platform_role": "ADMIN",
+            },
+        )
+        assert second_admin_resp.status_code == 201
+        assert second_admin_resp.json()["platform_role"] == "ADMIN"
+
+        # Create private project as lead and seed sources (includes restricted-vendor-note)
+        priv_slug = f"private-vault-{uuid.uuid4().hex[:6]}"
+        priv_proj_resp = client.post(
+            "/api/v1/projects",
+            headers=_auth_header(lead_token),
+            json={
+                "slug": priv_slug,
+                "name": "Confidential Enterprise Vault",
+                "description": "Private enterprise project for SEC-01 isolation testing",
+                "data_classification": "enterprise_confidential",
+            },
+        )
+        assert priv_proj_resp.status_code == 201
+        priv_proj_id = priv_proj_resp.json()["id"]
+
+        seed_resp = client.post(
+            f"/api/v1/projects/{priv_proj_id}/sources/seed-payflow",
+            headers=_auth_header(lead_token),
+        )
+        assert seed_resp.status_code == 201
+        priv_restricted_doc = next(
+            s for s in seed_resp.json() if s["stable_source_id"] == "restricted-vendor-note"
+        )
+
+        priv_handover_resp = client.post(
+            "/api/handovers",
+            headers=_auth_header(lead_token),
+            json={
+                "project_id": priv_proj_id,
+                "title": "Private Vault Handover",
+                "scope_description": "Confidential transition package",
+                "departing_role": "Principal Security Engineer",
+                "allowed_classifications": ["PUBLIC", "INTERNAL"],
+            },
+        )
+        assert priv_handover_resp.status_code == 201
+        priv_handover_id = priv_handover_resp.json()["handoverId"]
+
+        # 4. Verify ADMIN without explicit project membership is blocked from private project resources
+        admin_proj_list = client.get("/api/v1/projects", headers=_auth_header(admin_token))
+        assert admin_proj_list.status_code == 200
+        assert all(p["id"] != priv_proj_id for p in admin_proj_list.json())
+
+        admin_handover_list = client.get("/api/handovers", headers=_auth_header(admin_token))
+        assert admin_handover_list.status_code == 200
+        assert all(h["handoverId"] != priv_handover_id for h in admin_handover_list.json())
+
+        assert (
+            client.get(f"/api/v1/projects/{priv_proj_id}", headers=_auth_header(admin_token)).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                f"/api/v1/projects/{priv_proj_id}/sources", headers=_auth_header(admin_token)
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                f"/api/v1/sources/{priv_restricted_doc['id']}", headers=_auth_header(admin_token)
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                f"/api/handovers/{priv_handover_id}/draft", headers=_auth_header(admin_token)
+            ).status_code
+            == 403
+        )
+
+        # 5. Verify legitimate ADMIN operations and audit logging
+        # Standard user is blocked from admin endpoints (GET /users, global GET /audit-logs)
+        assert client.get("/api/v1/users", headers=_auth_header(lead_token)).status_code == 403
+        assert client.get("/api/v1/audit-logs", headers=_auth_header(lead_token)).status_code == 403
+
+        # ADMIN can access GET /users and global GET /audit-logs
+        admin_users_resp = client.get("/api/v1/users", headers=_auth_header(admin_token))
+        assert admin_users_resp.status_code == 200
+        assert len(admin_users_resp.json()) >= 2
+
+        # ADMIN can explicitly assign a member to a project (audited as ADMIN_PROJECT_MEMBER_ASSIGNED)
+        # Assign ADMIN as OUTGOING_DEV with ONLY ["PUBLIC", "INTERNAL"] clearance (no RESTRICTED)
+        admin_assign_resp = client.post(
+            f"/api/v1/projects/{priv_proj_id}/members",
+            headers=_auth_header(admin_token),
+            json={
+                "user_id": admin_id,
+                "project_role": "OUTGOING_DEV",
+                "allowed_classifications": ["PUBLIC", "INTERNAL"],
+            },
+        )
+        assert admin_assign_resp.status_code == 200
+
+        # Even as a project member, ADMIN with ["PUBLIC", "INTERNAL"] clearance MUST be blocked from RESTRICTED sources
+        admin_restricted_read = client.get(
+            f"/api/v1/sources/{priv_restricted_doc['id']}",
+            headers=_auth_header(admin_token),
+        )
+        assert admin_restricted_read.status_code == 403
+
+        admin_restricted_upload = client.post(
+            f"/api/v1/projects/{priv_proj_id}/sources/upload",
+            headers=_auth_header(admin_token),
+            json={
+                "stable_source_id": "admin-restricted-upload-attempt",
+                "source_type": "technical_doc",
+                "title": "Unauthorized Restricted Upload",
+                "content": "Should be blocked because clearance is only PUBLIC and INTERNAL.",
+                "access_level": "RESTRICTED",
+                "version_tag": "v1",
+            },
+        )
+        assert admin_restricted_upload.status_code == 403
+
+        # Also verify ADMIN assigned as SUCCESSOR cannot bypass the unapproved draft gate
+        client.post(
+            f"/api/v1/projects/{priv_proj_id}/members",
+            headers=_auth_header(lead_token),
+            json={
+                "user_id": admin_id,
+                "project_role": "SUCCESSOR",
+                "allowed_classifications": ["PUBLIC", "INTERNAL"],
+            },
+        )
+        admin_successor_draft = client.get(
+            f"/api/handovers/{priv_handover_id}/draft",
+            headers=_auth_header(admin_token),
+        )
+        assert admin_successor_draft.status_code == 403
+
+        # Verify global audit trail captured the blocked attempts and legitimate admin actions
+        global_audits = client.get("/api/v1/audit-logs", headers=_auth_header(admin_token))
+        assert global_audits.status_code == 200
+        global_actions = {a["action"] for a in global_audits.json()}
+        assert "PRIVILEGED_SELF_REGISTRATION_BLOCKED" in global_actions
+        assert "ADMIN_USER_PROVISIONED" in global_actions
+        assert "UNAUTHORIZED_PROJECT_ACCESS_BLOCKED" in global_actions
+        assert "UNAUTHORIZED_ADMIN_OPERATION_BLOCKED" in global_actions
+        assert "ADMIN_USERS_LISTED" in global_actions
+        assert "ADMIN_PROJECT_MEMBER_ASSIGNED" in global_actions
+        assert "UNAUTHORIZED_SOURCE_ACCESS_BLOCKED" in global_actions
+        assert "UNAPPROVED_DRAFT_ACCESS_BLOCKED" in global_actions
+
+        # 4. Unauthenticated Incognito Guest Demo Workflow & Strict Isolation
+        # Attempting to self-register as GUEST_DEMO must be rejected
+        bad_guest_reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": _unique_email("fake.guest"),
+                "password": "StrongPassword!123",
+                "full_name": "Fake Guest",
+                "platform_role": "GUEST_DEMO",
+            },
+        )
+        assert bad_guest_reg.status_code == 403
+
+        # Unauthenticated Incognito call to POST /api/v1/demo/bootstrap-payflow (no Authorization header)
+        guest_bootstrap = client.post("/api/v1/demo/bootstrap-payflow")
+        assert guest_bootstrap.status_code == 200
+        guest_draft = guest_bootstrap.json()
+        assert guest_draft["handoverId"] == "payflow-handover-001"
+        payflow_proj_id = guest_draft["projectId"]
+        guest_scoped_source_ids = {s["stable_source_id"] for s in guest_draft["scopedSources"]}
+        assert "issue-104" in guest_scoped_source_ids
+        assert "restricted-vendor-note" not in guest_scoped_source_ids
+
+        # Unauthenticated Guest can list projects -> sees ONLY synthetic payflow project with GUEST_DEMO role
+        guest_projects = client.get("/api/v1/projects")
+        assert guest_projects.status_code == 200
+        guest_proj_list = guest_projects.json()
+        assert len(guest_proj_list) == 1
+        assert guest_proj_list[0]["slug"] == "payflow"
+        assert guest_proj_list[0]["current_user_role"] == "GUEST_DEMO"
+
+        # Unauthenticated Guest can list PayFlow sources -> sees only PUBLIC and INTERNAL (8 sources, no restricted-vendor-note)
+        guest_sources = client.get(f"/api/v1/projects/{payflow_proj_id}/sources")
+        assert guest_sources.status_code == 200
+        guest_source_ids = {s["stable_source_id"] for s in guest_sources.json()}
+        assert "restricted-vendor-note" not in guest_source_ids
+        assert len(guest_sources.json()) == 8
+
+        # Unauthenticated Guest can inspect a PUBLIC/INTERNAL PayFlow source and view the PayFlow draft
+        assert (
+            client.get(f"/api/v1/sources/issue-104?project_id={payflow_proj_id}").status_code
+            == 200
+        )
+        assert client.get("/api/handovers/payflow-handover-001/draft").status_code == 200
+        assert client.get("/api/handovers/payflow-handover-001/status").status_code == 200
+
+        # Unauthenticated Guest MUST be blocked from RESTRICTED evidence in PayFlow
+        guest_restricted = client.get(
+            f"/api/v1/sources/restricted-vendor-note?project_id={payflow_proj_id}"
+        )
+        assert guest_restricted.status_code == 403
+
+        # Unauthenticated Guest MUST be blocked from accessing any non-PayFlow project or its handovers/sources
+        assert client.get(f"/api/v1/projects/{priv_proj_id}").status_code == 403
+        assert client.get(f"/api/v1/projects/{priv_proj_id}/sources").status_code == 403
+        assert client.get(f"/api/handovers/{priv_handover_id}/draft").status_code == 403
+
+        # Unauthenticated Guest MUST be blocked (401) from all write, review, approval, and admin operations
+        first_claim_id = guest_draft["claims"][0]["id"]
+        assert (
+            client.post(
+                "/api/v1/projects",
+                json={"slug": "guest-illegal-proj", "name": "Illegal"},
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                f"/api/v1/projects/{payflow_proj_id}/sources/upload",
+                json={
+                    "stable_source_id": "guest-upload",
+                    "source_type": "technical_doc",
+                    "title": "Guest Upload",
+                    "content": "Not allowed",
+                    "access_level": "PUBLIC",
+                },
+            ).status_code
+            == 401
+        )
+        assert (
+            client.patch(
+                f"/api/claims/{first_claim_id}",
+                json={"status": "verified", "review_state": "approved"},
+            ).status_code
+            == 401
+        )
+        assert client.post("/api/handovers/payflow-handover-001/approve").status_code == 401
+        assert client.get("/api/v1/users").status_code == 401
+        assert client.get("/api/v1/audit-logs").status_code == 401
+

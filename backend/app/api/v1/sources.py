@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_user_or_guest_demo
 from app.models.entities import User
 from app.modules.ingestion.service import (
     get_source_detail_for_user,
@@ -51,7 +51,7 @@ def upload_source_endpoint(
 )
 def list_project_sources_endpoint(
     project_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> List[SourceDocumentResponse]:
     return list_project_sources_for_user(db, project_id, current_user)
@@ -64,7 +64,7 @@ def list_project_sources_endpoint(
 def get_source_detail_endpoint(
     source_id: str,
     project_id: Optional[str] = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> SourceDocumentResponse:
     return get_source_detail_for_user(db, source_id, current_user, project_id=project_id)

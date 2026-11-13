@@ -237,7 +237,7 @@ def upload_custom_source(
         actor,
         allowed_roles=[ProjectRole.PROJECT_LEAD.value, ProjectRole.OUTGOING_DEV.value],
     )
-    if req.access_level.value not in membership.allowed_classifications and actor.platform_role != "ADMIN":
+    if req.access_level.value not in membership.allowed_classifications:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You are not authorised to upload sources with classification '{req.access_level.value}'.",
@@ -317,7 +317,7 @@ def get_source_detail_for_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source document not found.")
 
     membership = get_project_membership(db, doc.project_id, user)
-    if doc.access_level not in membership.allowed_classifications and user.platform_role != "ADMIN":
+    if doc.access_level not in membership.allowed_classifications:
         record_audit_event(
             db=db,
             action="UNAUTHORIZED_SOURCE_ACCESS_BLOCKED",
@@ -346,24 +346,62 @@ def retrieve_scoped_chunks(
     source_types: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Permission-filtered semantic retrieval (Module 7). Enforces access scope BEFORE retrieval."""
-    query = (
+    if not allowed_classifications:
+        return []
+
+    base_query = (
         db.query(DocumentChunk, SourceDocument)
         .join(SourceDocument, SourceDocument.id == DocumentChunk.source_document_id)
         .filter(
             DocumentChunk.project_id == project_id,
             DocumentChunk.access_level.in_(allowed_classifications),
+            SourceDocument.access_level.in_(allowed_classifications),
         )
     )
     if scoped_source_doc_ids:
-        query = query.filter(DocumentChunk.source_document_id.in_(scoped_source_doc_ids))
+        base_query = base_query.filter(DocumentChunk.source_document_id.in_(scoped_source_doc_ids))
     if source_types:
-        query = query.filter(SourceDocument.source_type.in_(source_types))
+        base_query = base_query.filter(SourceDocument.source_type.in_(source_types))
 
-    rows = query.all()
+    query_vec = generate_embedding_vector(query_text, dimension=settings.EMBEDDING_DIMENSION)
+    dialect_name = db.bind.dialect.name if db.bind is not None else "unknown"
+
+    if dialect_name == "postgresql":
+        distance_expr = DocumentChunk.embedding.cosine_distance(query_vec).label("cosine_distance")
+        pg_rows = (
+            base_query.add_columns(distance_expr)
+            .order_by(distance_expr.asc(), DocumentChunk.chunk_index.asc())
+            .limit(top_k)
+            .all()
+        )
+        pg_results: List[Dict[str, Any]] = []
+        for chunk, doc, dist in pg_rows:
+            sim = 1.0 - float(dist) if dist is not None else 0.0
+            pg_results.append(
+                {
+                    "chunk_id": chunk.id,
+                    "source_document_id": doc.id,
+                    "stable_source_id": doc.stable_source_id,
+                    "source_type": doc.source_type,
+                    "title": doc.title,
+                    "version_tag": doc.version_tag,
+                    "access_level": doc.access_level,
+                    "location_label": chunk.location_label,
+                    "char_start": chunk.char_start,
+                    "char_end": chunk.char_end,
+                    "page_number": chunk.page_number,
+                    "content": chunk.content,
+                    "source_updated_at": doc.source_updated_at.isoformat(),
+                    "metadata_json": doc.metadata_json or {},
+                    "similarity": round(sim, 4),
+                }
+            )
+        return pg_results
+
+    rows = base_query.all()
     if not rows:
         return []
 
-    query_vec = generate_embedding_vector(query_text, dimension=settings.EMBEDDING_DIMENSION)
     scored: List[Dict[str, Any]] = []
     for chunk, doc in rows:
         emb = list(chunk.embedding) if chunk.embedding is not None else []

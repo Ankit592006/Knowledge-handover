@@ -1,7 +1,7 @@
 """Authentication and User Management Service (Modules 1 & 2)."""
 
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -14,8 +14,10 @@ from app.core.security import (
     verify_password,
 )
 from app.models.entities import Project, ProjectMember, RefreshToken, User
+from app.models.enums import PlatformRole
 from app.modules.audit.service import record_audit_event
 from app.schemas.api_schemas import (
+    AdminUserCreateRequest,
     AuthTokenResponse,
     ProjectMembershipBrief,
     TokenRefreshRequest,
@@ -57,6 +59,24 @@ def build_user_response(db: Session, user: User) -> UserResponse:
 
 def register_user(db: Session, req: UserRegisterRequest) -> AuthTokenResponse:
     normalized_email = req.email.strip().lower()
+    if req.platform_role != PlatformRole.STANDARD:
+        record_audit_event(
+            db=db,
+            action="PRIVILEGED_SELF_REGISTRATION_BLOCKED",
+            target_type="user",
+            target_id=normalized_email,
+            actor=None,
+            new_state={
+                "email": normalized_email,
+                "attempted_platform_role": req.platform_role.value,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public self-registration cannot assign privileged or reserved platform roles.",
+        )
+
     existing = db.query(User).filter(User.email == normalized_email).first()
     if existing:
         raise HTTPException(
@@ -64,11 +84,12 @@ def register_user(db: Session, req: UserRegisterRequest) -> AuthTokenResponse:
             detail="An account with this email already exists.",
         )
 
+    # Public registration always assigns the non-privileged STANDARD role
     user = User(
         email=normalized_email,
         password_hash=hash_password(req.password),
         full_name=req.full_name.strip(),
-        platform_role=req.platform_role.value,
+        platform_role=PlatformRole.STANDARD.value,
         is_active=True,
     )
     db.add(user)
@@ -96,9 +117,81 @@ def register_user(db: Session, req: UserRegisterRequest) -> AuthTokenResponse:
     )
 
 
+def provision_admin_user(
+    db: Session,
+    req: AdminUserCreateRequest,
+    actor: Optional[User] = None,
+) -> UserResponse:
+    """
+    Trusted provisioning path for creating ADMIN or STANDARD accounts.
+    May only be called by an authenticated Platform ADMIN via API or an internal provisioning script.
+    """
+    if actor is not None and actor.platform_role != PlatformRole.ADMIN.value:
+        record_audit_event(
+            db=db,
+            action="UNAUTHORIZED_ADMIN_OPERATION_BLOCKED",
+            target_type="user",
+            target_id=req.email.strip().lower(),
+            actor=actor,
+            actor_role=actor.platform_role,
+            new_state={"attempted_operation": "provision_admin_user"},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an authorized Platform Administrator may provision privileged accounts.",
+        )
+
+    if req.platform_role == PlatformRole.GUEST_DEMO:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot provision an interactive account with the reserved GUEST_DEMO role.",
+        )
+
+    normalized_email = req.email.strip().lower()
+    existing = db.query(User).filter(User.email == normalized_email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
+
+    user = User(
+        email=normalized_email,
+        password_hash=hash_password(req.password),
+        full_name=req.full_name.strip(),
+        platform_role=req.platform_role.value,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    record_audit_event(
+        db=db,
+        action="ADMIN_USER_PROVISIONED",
+        target_type="user",
+        target_id=user.id,
+        actor=actor,
+        actor_role=PlatformRole.ADMIN.value if actor else "SYSTEM_PROVISIONER",
+        new_state={
+            "email": user.email,
+            "platform_role": user.platform_role,
+            "provisioned_by": actor.email if actor else "SYSTEM_PROVISIONER",
+        },
+    )
+    db.commit()
+    db.refresh(user)
+    return build_user_response(db, user)
+
+
 def authenticate_user(db: Session, req: UserLoginRequest) -> AuthTokenResponse:
     normalized_email = req.email.strip().lower()
     user = db.query(User).filter(User.email == normalized_email).first()
+    if user and user.platform_role == "GUEST_DEMO":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest demo accounts cannot authenticate with credentials.",
+        )
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

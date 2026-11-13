@@ -5,10 +5,17 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, get_project_membership
+from app.core.security import (
+    ensure_guest_demo_user,
+    get_current_user,
+    get_current_user_or_guest_demo,
+    get_project_membership,
+    hash_password,
+    require_platform_admin,
+)
 from app.models.entities import Handover, Project, ProjectMember, User
-from app.models.enums import ProjectRole
-from app.modules.audit.service import list_audit_events
+from app.models.enums import PlatformRole, ProjectRole
+from app.modules.audit.service import list_audit_events, record_audit_event
 from app.modules.handovers.service import (
     acknowledge_handover_receipt,
     answer_clarification_question,
@@ -23,7 +30,7 @@ from app.modules.handovers.service import (
     update_claim_by_reviewer,
 )
 from app.modules.ingestion.service import seed_payflow_sources_for_project
-from app.modules.projects.service import assign_project_member, create_project
+from app.modules.projects.service import create_project
 from app.schemas.api_schemas import (
     AccessClassification,
     AuditLogResponse,
@@ -36,29 +43,49 @@ from app.schemas.api_schemas import (
     HandoverSourceImportRequest,
     OpenQuestionOutputSchema,
     ProjectCreateRequest,
-    ProjectMemberAssignRequest,
     SuccessorAcknowledgeRequest,
     SuccessorContinuationPlanResponse,
 )
 
 router = APIRouter(tags=["Handovers, AI Reconstruction, Review & Successor"])
 
+PAYFLOW_SYSTEM_OWNER_EMAIL = "demo.system@payflow.demo"
+
+
+def _ensure_payflow_system_owner(db: Session) -> User:
+    """Internal system owner for bootstrapping synthetic PayFlow demo data when invoked by a read-only Guest Demo user."""
+    owner = db.query(User).filter(User.email == PAYFLOW_SYSTEM_OWNER_EMAIL).first()
+    if not owner:
+        owner = User(
+            email=PAYFLOW_SYSTEM_OWNER_EMAIL,
+            password_hash=hash_password("PayFlow_Internal_System_Owner_#2026!"),
+            full_name="PayFlow Demo System Lead",
+            platform_role=PlatformRole.STANDARD.value,
+            is_active=True,
+        )
+        db.add(owner)
+        db.commit()
+        db.refresh(owner)
+    return owner
+
 
 @router.get("/handovers", response_model=List[HandoverDraftResponse])
 def list_handovers_endpoint(
     project_id: Optional[str] = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> List[HandoverDraftResponse]:
     query = db.query(Handover)
     if project_id:
         get_project_membership(db, project_id, current_user)
         query = query.filter(Handover.project_id == project_id)
-    elif current_user.platform_role != "ADMIN":
+    else:
         member_proj_ids = [
             pm.project_id
             for pm in db.query(ProjectMember).filter(ProjectMember.user_id == current_user.id).all()
         ]
+        if not member_proj_ids:
+            return []
         query = query.filter(Handover.project_id.in_(member_proj_ids))
 
     rows = query.order_by(Handover.updated_at.desc()).all()
@@ -67,7 +94,6 @@ def list_handovers_endpoint(
         membership = get_project_membership(db, h.project_id, current_user)
         if (
             membership.project_role == ProjectRole.SUCCESSOR.value
-            and current_user.platform_role != "ADMIN"
             and h.status not in ("approved", "acknowledged")
         ):
             continue
@@ -112,7 +138,7 @@ def reconstruct_handover_endpoint(
 @router.get("/handovers/{handover_id}/status")
 def handover_processing_status_endpoint(
     handover_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     handover = get_handover_by_id_or_code(db, handover_id)
@@ -129,7 +155,7 @@ def handover_processing_status_endpoint(
 @router.get("/handovers/{handover_id}/draft", response_model=HandoverDraftResponse)
 def get_handover_draft_endpoint(
     handover_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> HandoverDraftResponse:
     return get_handover_draft_for_user(db, handover_id, current_user)
@@ -176,7 +202,7 @@ def approve_handover_endpoint(
 )
 def get_successor_view_endpoint(
     handover_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> SuccessorContinuationPlanResponse:
     return build_successor_continuation_plan(db, handover_id, current_user)
@@ -222,6 +248,17 @@ def list_project_audit_logs_endpoint(
             current_user,
             allowed_roles=[ProjectRole.PROJECT_LEAD.value, ProjectRole.REVIEWER_SME.value],
         )
+    else:
+        require_platform_admin(current_user, db)
+        record_audit_event(
+            db=db,
+            action="ADMIN_GLOBAL_AUDIT_LOGS_VIEWED",
+            target_type="audit_log",
+            target_id="all",
+            actor=current_user,
+            actor_role=PlatformRole.ADMIN.value,
+        )
+        db.commit()
     events = list_audit_events(db, project_id=project_id)
     return [AuditLogResponse.model_validate(e) for e in events]
 
@@ -230,7 +267,7 @@ def list_project_audit_logs_endpoint(
 def export_handover_package_endpoint(
     handover_id: str,
     format_type: str = Query(default="json", pattern="^(json|markdown)$"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     plan = build_successor_continuation_plan(db, handover_id, current_user)
@@ -271,10 +308,13 @@ def export_handover_package_endpoint(
 
 @router.post("/demo/bootstrap-payflow", response_model=HandoverDraftResponse)
 def bootstrap_payflow_demo_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> HandoverDraftResponse:
     """One-click idempotent PayFlow demo workspace initializer for judges and testers."""
+    is_guest = current_user.platform_role == PlatformRole.GUEST_DEMO.value
+    system_lead = _ensure_payflow_system_owner(db)
+
     project = db.query(Project).filter(Project.slug == "payflow").first()
     if not project:
         proj_resp = create_project(
@@ -285,34 +325,54 @@ def bootstrap_payflow_demo_endpoint(
                 description="Synthetic microservice project with intentional conflicting statuses, stale docs, unknown owners, and restricted records.",
                 data_classification="synthetic_demo",
             ),
-            current_user,
+            system_lead,
         )
         project_id = proj_resp.id
     else:
         project_id = project.id
-        # Ensure current user is a member
-        existing_mem = (
+        existing_sys_mem = (
+            db.query(ProjectMember)
+            .filter(ProjectMember.project_id == project_id, ProjectMember.user_id == system_lead.id)
+            .first()
+        )
+        if not existing_sys_mem:
+            db.add(
+                ProjectMember(
+                    project_id=project_id,
+                    user_id=system_lead.id,
+                    project_role=ProjectRole.PROJECT_LEAD.value,
+                    allowed_classifications=[
+                        AccessClassification.PUBLIC.value,
+                        AccessClassification.INTERNAL.value,
+                        AccessClassification.RESTRICTED.value,
+                    ],
+                )
+            )
+            db.commit()
+
+    if is_guest:
+        ensure_guest_demo_user(db)
+    else:
+        existing_user_mem = (
             db.query(ProjectMember)
             .filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id)
             .first()
         )
-        if not existing_mem:
-            assign_project_member(
-                db,
-                project_id,
-                ProjectMemberAssignRequest(
+        if not existing_user_mem:
+            db.add(
+                ProjectMember(
+                    project_id=project_id,
                     user_id=current_user.id,
-                    project_role=ProjectRole.PROJECT_LEAD,
+                    project_role=ProjectRole.PROJECT_LEAD.value,
                     allowed_classifications=[
-                        AccessClassification.PUBLIC,
-                        AccessClassification.INTERNAL,
-                        AccessClassification.RESTRICTED,
+                        AccessClassification.PUBLIC.value,
+                        AccessClassification.INTERNAL.value,
                     ],
-                ),
-                current_user,
+                )
             )
+            db.commit()
 
-    seed_payflow_sources_for_project(db, project_id, current_user)
+    seed_payflow_sources_for_project(db, project_id, system_lead)
 
     existing_handover = (
         db.query(Handover)
@@ -333,7 +393,7 @@ def bootstrap_payflow_demo_endpoint(
                     AccessClassification.INTERNAL,
                 ],
             ),
-            current_user,
+            system_lead,
         )
         handover_code = draft.handoverId
     else:
@@ -343,6 +403,7 @@ def bootstrap_payflow_demo_endpoint(
         db,
         handover_code,
         HandoverSourceImportRequest(source_ids=[], seed_payflow_if_empty=True),
-        current_user,
+        system_lead,
     )
-    return reconstruct_handover_with_agents(db, handover_code, current_user)
+    reconstruct_handover_with_agents(db, handover_code, system_lead)
+    return get_handover_draft_for_user(db, handover_code, current_user)

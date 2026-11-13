@@ -1,6 +1,30 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+declare global {
+  interface Window {
+    __KH_RUNTIME_CONFIG__?: {
+      VITE_API_BASE_URL?: string;
+    };
+  }
+}
+
+function resolveApiBaseUrl(): string {
+  const runtimeUrl =
+    typeof window !== "undefined" ? window.__KH_RUNTIME_CONFIG__?.VITE_API_BASE_URL?.trim() : undefined;
+  if (runtimeUrl) {
+    return runtimeUrl;
+  }
+  const buildTimeUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (buildTimeUrl) {
+    return buildTimeUrl;
+  }
+  if (import.meta.env.DEV) {
+    return "http://localhost:8000";
+  }
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

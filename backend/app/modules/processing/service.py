@@ -98,7 +98,7 @@ def split_document_into_chunks(
 
 
 def generate_embedding_vector(text: str, dimension: int = 384) -> List[float]:
-    """Generate a normalized semantic token-hash embedding vector (384-dim) for fast, deterministic vector retrieval."""
+    """Generate a normalized 384-dim lexical MD5 feature-hash vector (Weinberger et al., non-semantic token projection)."""
     vec = [0.0] * dimension
     tokens = re.findall(r"[a-z0-9_]+", text.lower())
     if not tokens:

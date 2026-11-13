@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.entities import ProjectMember, RefreshToken, User
+from app.models.entities import Project, ProjectMember, RefreshToken, User
+from app.models.enums import PlatformRole, ProjectRole
+from app.modules.audit.service import record_audit_event
 
 settings = get_settings()
 ph = PasswordHasher(time_cost=2, memory_cost=32768, parallelism=2)
@@ -112,8 +114,81 @@ def get_current_user(
     return user
 
 
-def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.platform_role != "ADMIN":
+def ensure_guest_demo_user(db: Session) -> User:
+    """Provision or retrieve the dedicated read-only Guest Demo account limited to synthetic PayFlow data."""
+    guest_email = "guest.demo@payflow.demo"
+    guest = db.query(User).filter(User.email == guest_email).first()
+    if not guest:
+        guest = User(
+            email=guest_email,
+            password_hash="!",
+            full_name="Guest Demo Viewer (Read-Only)",
+            platform_role=PlatformRole.GUEST_DEMO.value,
+            is_active=True,
+        )
+        db.add(guest)
+        db.flush()
+    elif guest.platform_role != PlatformRole.GUEST_DEMO.value:
+        guest.platform_role = PlatformRole.GUEST_DEMO.value
+        db.flush()
+
+    payflow_proj = (
+        db.query(Project)
+        .filter(Project.slug == "payflow", Project.data_classification == "synthetic_demo")
+        .first()
+    )
+    if payflow_proj:
+        mem = (
+            db.query(ProjectMember)
+            .filter(
+                ProjectMember.project_id == payflow_proj.id,
+                ProjectMember.user_id == guest.id,
+            )
+            .first()
+        )
+        if not mem:
+            db.add(
+                ProjectMember(
+                    project_id=payflow_proj.id,
+                    user_id=guest.id,
+                    project_role=ProjectRole.GUEST_DEMO.value,
+                    allowed_classifications=["PUBLIC", "INTERNAL"],
+                )
+            )
+            db.flush()
+        elif mem.project_role != ProjectRole.GUEST_DEMO.value or mem.allowed_classifications != ["PUBLIC", "INTERNAL"]:
+            mem.project_role = ProjectRole.GUEST_DEMO.value
+            mem.allowed_classifications = ["PUBLIC", "INTERNAL"]
+            db.flush()
+
+    db.commit()
+    return guest
+
+
+def get_current_user_or_guest_demo(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Return authenticated user if Bearer token is provided; otherwise return read-only Guest Demo user."""
+    if credentials is not None and credentials.credentials:
+        return get_current_user(credentials=credentials, db=db)
+    return ensure_guest_demo_user(db)
+
+
+def require_platform_admin(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    if current_user.platform_role != PlatformRole.ADMIN.value:
+        record_audit_event(
+            db=db,
+            action="UNAUTHORIZED_ADMIN_OPERATION_BLOCKED",
+            target_type="platform_admin",
+            target_id=current_user.id,
+            actor=current_user,
+            actor_role=current_user.platform_role,
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Platform Administrator role required.",
@@ -127,7 +202,25 @@ def get_project_membership(
     user: User,
     allowed_roles: Optional[List[str]] = None,
 ) -> ProjectMember:
-    """Enforce project membership and optional role check on the backend (prevents IDOR & privilege escalation)."""
+    """Enforce explicit project membership, role check, and guest demo isolation (prevents IDOR & privilege escalation)."""
+    if user.platform_role == PlatformRole.GUEST_DEMO.value:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project or project.slug != "payflow" or project.data_classification != "synthetic_demo":
+            record_audit_event(
+                db=db,
+                action="GUEST_NON_DEMO_PROJECT_ACCESS_BLOCKED",
+                target_type="project",
+                target_id=project_id,
+                actor=user,
+                actor_role=PlatformRole.GUEST_DEMO.value,
+                project_id=project_id,
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Guest Demo role is strictly limited to the synthetic PayFlow demonstration project.",
+            )
+
     membership = (
         db.query(ProjectMember)
         .filter(
@@ -137,21 +230,41 @@ def get_project_membership(
         .first()
     )
     if not membership:
-        if user.platform_role == "ADMIN":
-            # Platform Admin receives synthetic virtual membership with full classification for administration
-            return ProjectMember(
-                id="admin-virtual",
-                project_id=project_id,
-                user_id=user.id,
-                project_role="PROJECT_LEAD",
-                allowed_classifications=["PUBLIC", "INTERNAL", "RESTRICTED"],
-            )
+        record_audit_event(
+            db=db,
+            action="UNAUTHORIZED_PROJECT_ACCESS_BLOCKED",
+            target_type="project",
+            target_id=project_id,
+            actor=user,
+            actor_role=user.platform_role,
+            project_id=project_id,
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: You are not an authorised member of this project.",
         )
 
-    if allowed_roles and membership.project_role not in allowed_roles and user.platform_role != "ADMIN":
+    if user.platform_role == PlatformRole.GUEST_DEMO.value:
+        # Enforce strict read-only PUBLIC/INTERNAL clearance for Guest Demo regardless of DB state
+        membership.project_role = ProjectRole.GUEST_DEMO.value
+        membership.allowed_classifications = [
+            c for c in (membership.allowed_classifications or ["PUBLIC", "INTERNAL"])
+            if c in ("PUBLIC", "INTERNAL")
+        ]
+
+    if allowed_roles and membership.project_role not in allowed_roles:
+        record_audit_event(
+            db=db,
+            action="INSUFFICIENT_PROJECT_ROLE_BLOCKED",
+            target_type="project",
+            target_id=project_id,
+            actor=user,
+            actor_role=membership.project_role,
+            project_id=project_id,
+            new_state={"required_roles": allowed_roles, "actual_role": membership.project_role},
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Insufficient project permissions. Required one of: {', '.join(allowed_roles)}.",

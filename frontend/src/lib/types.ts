@@ -21,7 +21,8 @@ export type ProjectRole =
   | "PROJECT_LEAD"
   | "OUTGOING_DEV"
   | "REVIEWER_SME"
-  | "SUCCESSOR";
+  | "SUCCESSOR"
+  | "GUEST_DEMO";
 
 export interface ProjectMembershipBrief {
   project_id: string;

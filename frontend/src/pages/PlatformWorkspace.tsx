@@ -202,6 +202,8 @@ export const PlatformWorkspace: React.FC = () => {
     }
   };
 
+  const isGuestDemo = !isAuthenticated || effectiveRole === "GUEST_DEMO";
+
   const handleLoadSuccessorPlan = async () => {
     if (!handover) return;
     setErrorMessage(null);
@@ -212,15 +214,18 @@ export const PlatformWorkspace: React.FC = () => {
       setContinuationPlan(succResp.data);
       setActiveTab("successor");
     } catch (err: any) {
+      const backendDetail = err?.response?.data?.detail;
       setErrorMessage(
-        err?.response?.data?.detail ||
-          "Successor view blocked: Handover must be approved by a human reviewer before sharing."
+        isGuestDemo
+          ? `${backendDetail || "Successor view is protected until human approval."} Sign in as a Reviewer or Project Lead to verify claims and approve the handover package.`
+          : backendDetail ||
+              "Successor view blocked: Handover must be approved by a human reviewer before sharing."
       );
     }
   };
 
   const handleAcknowledgeReceipt = async () => {
-    if (!handover) return;
+    if (!handover || isGuestDemo) return;
     setErrorMessage(null);
     try {
       const resp = await apiClient.post(`/api/handovers/${handover.handoverId}/acknowledge`, {
@@ -241,6 +246,12 @@ export const PlatformWorkspace: React.FC = () => {
   const handleLoadAuditLogs = async () => {
     if (!handover) return;
     setErrorMessage(null);
+    if (isGuestDemo) {
+      setErrorMessage(
+        "Audit Trail requires an authenticated Project Lead or Reviewer session. Please sign in to inspect immutable audit logs."
+      );
+      return;
+    }
     try {
       const resp = await apiClient.get(
         `/api/v1/handovers/${handover.handoverId}/audit-logs`
@@ -282,14 +293,7 @@ export const PlatformWorkspace: React.FC = () => {
             >
               Overview
             </button>
-            {!isAuthenticated ? (
-              <button
-                onClick={() => setActiveTab("auth")}
-                className="rounded-md bg-teal-600 px-3 py-1.5 text-white hover:bg-teal-500"
-              >
-                Login / Register
-              </button>
-            ) : (
+            {(isAuthenticated || Boolean(handover)) && (
               <>
                 <button
                   onClick={() => setActiveTab("dashboard")}
@@ -331,21 +335,23 @@ export const PlatformWorkspace: React.FC = () => {
                 >
                   Successor Plan
                 </button>
-                <button
-                  onClick={handleLoadAuditLogs}
-                  className={`rounded-md px-3 py-1.5 ${
-                    activeTab === "audit"
-                      ? "bg-teal-600 text-white"
-                      : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                >
-                  Audit Trail
-                </button>
               </>
+            )}
+            {isAuthenticated && (
+              <button
+                onClick={handleLoadAuditLogs}
+                className={`rounded-md px-3 py-1.5 ${
+                  activeTab === "audit"
+                    ? "bg-teal-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                Audit Trail
+              </button>
             )}
           </nav>
 
-          {isAuthenticated && (
+          {isAuthenticated ? (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400">Perspective:</span>
               <select
@@ -364,6 +370,21 @@ export const PlatformWorkspace: React.FC = () => {
                 className="rounded border border-slate-700 px-2.5 py-1 text-slate-400 hover:bg-slate-800"
               >
                 Logout
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs">
+              <span
+                data-testid="guest-demo-badge"
+                className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 font-semibold text-amber-300"
+              >
+                GUEST_DEMO (Read-Only)
+              </span>
+              <button
+                onClick={() => setActiveTab("auth")}
+                className="rounded-md bg-teal-600 px-3 py-1.5 font-medium text-white hover:bg-teal-500"
+              >
+                Login / Register
               </button>
             </div>
           )}
@@ -406,9 +427,24 @@ export const PlatformWorkspace: React.FC = () => {
                 Knowledge Handover converts scattered software artefacts (issues, pull requests, ADRs, meeting notes, and technical docs) into an evidence-linked, conflict-aware, human-approved handover package and prioritised continuation plan.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
+                {!isAuthenticated && (
+                  <button
+                    onClick={handleBootstrapPayFlowDemo}
+                    disabled={isLoading}
+                    className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-teal-500 disabled:opacity-50"
+                  >
+                    {isLoading
+                      ? "Bootstrapping PayFlow Demo..."
+                      : "Try Instant PayFlow Demo (Read-Only)"}
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveTab(isAuthenticated ? "dashboard" : "auth")}
-                  className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-teal-500"
+                  className={`rounded-lg px-5 py-2.5 text-sm font-semibold shadow ${
+                    isAuthenticated
+                      ? "bg-teal-600 text-white hover:bg-teal-500"
+                      : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  }`}
                 >
                   {isAuthenticated ? "Open Handover Workspace" : "Get Started — Login / Register"}
                 </button>
@@ -616,54 +652,69 @@ export const PlatformWorkspace: React.FC = () => {
               </div>
             </div>
 
-            <form
-              onSubmit={handleUploadCustomSource}
-              className="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4"
-            >
-              <h3 className="text-sm font-bold text-white">
-                Ingest Additional Project Record (Automatic Secret Scanning & Chunking)
-              </h3>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <input
-                  type="text"
-                  value={newSourceId}
-                  onChange={(e) => setNewSourceId(e.target.value)}
-                  placeholder="stable_source_id"
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
-                />
-                <input
-                  type="text"
-                  value={newSourceTitle}
-                  onChange={(e) => setNewSourceTitle(e.target.value)}
-                  placeholder="Source Title"
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
-                />
-                <select
-                  value={newSourceType}
-                  onChange={(e) => setNewSourceType(e.target.value)}
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            {isGuestDemo ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <strong>Read-Only Guest Demo Scope (PUBLIC & INTERNAL):</strong> Custom source upload and RESTRICTED records (e.g., <code className="font-mono">restricted-vendor-note</code>) are protected. Sign in to upload sources or manage clearances.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("auth")}
+                  className="rounded-md bg-teal-600 px-3 py-1.5 font-semibold text-white hover:bg-teal-500"
                 >
-                  <option value="technical_doc">Technical Document</option>
-                  <option value="synthetic_issue">Issue</option>
-                  <option value="pull_request">Pull Request</option>
-                  <option value="adr">ADR</option>
-                  <option value="meeting_note">Meeting Note</option>
-                </select>
+                  Login / Register
+                </button>
               </div>
-              <textarea
-                rows={3}
-                value={newSourceContent}
-                onChange={(e) => setNewSourceContent(e.target.value)}
-                className="w-full rounded border border-slate-700 bg-slate-950 p-3 text-xs text-white font-mono"
-              />
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-500"
+            ) : (
+              <form
+                onSubmit={handleUploadCustomSource}
+                className="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4"
               >
-                Ingest Source & Re-Run Reconstruction
-              </button>
-            </form>
+                <h3 className="text-sm font-bold text-white">
+                  Ingest Additional Project Record (Automatic Secret Scanning & Chunking)
+                </h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <input
+                    type="text"
+                    value={newSourceId}
+                    onChange={(e) => setNewSourceId(e.target.value)}
+                    placeholder="stable_source_id"
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+                  />
+                  <input
+                    type="text"
+                    value={newSourceTitle}
+                    onChange={(e) => setNewSourceTitle(e.target.value)}
+                    placeholder="Source Title"
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+                  />
+                  <select
+                    value={newSourceType}
+                    onChange={(e) => setNewSourceType(e.target.value)}
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+                  >
+                    <option value="technical_doc">Technical Document</option>
+                    <option value="synthetic_issue">Issue</option>
+                    <option value="pull_request">Pull Request</option>
+                    <option value="adr">ADR</option>
+                    <option value="meeting_note">Meeting Note</option>
+                  </select>
+                </div>
+                <textarea
+                  rows={3}
+                  value={newSourceContent}
+                  onChange={(e) => setNewSourceContent(e.target.value)}
+                  className="w-full rounded border border-slate-700 bg-slate-950 p-3 text-xs text-white font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-500"
+                >
+                  Ingest Source & Re-Run Reconstruction
+                </button>
+              </form>
+            )}
           </div>
         )}
 
@@ -682,7 +733,8 @@ export const PlatformWorkspace: React.FC = () => {
                 <p className="mt-1 text-xs text-slate-300">{handover.summary.text}</p>
               </div>
               <div className="flex items-center gap-3">
-                {(effectiveRole === "PROJECT_LEAD" || effectiveRole === "REVIEWER_SME") && (
+                {!isGuestDemo &&
+                (effectiveRole === "PROJECT_LEAD" || effectiveRole === "REVIEWER_SME") ? (
                   <button
                     onClick={handleApproveHandover}
                     disabled={isLoading}
@@ -690,7 +742,18 @@ export const PlatformWorkspace: React.FC = () => {
                   >
                     Approve Handover Package & Unlock Successor View
                   </button>
-                )}
+                ) : isGuestDemo ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3.5 py-2 text-xs text-amber-200">
+                    <span>Read-Only Guest Demo — Sign in to verify claims & approve package</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("auth")}
+                      className="rounded bg-teal-600 px-2.5 py-1 font-semibold text-white hover:bg-teal-500"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -751,9 +814,10 @@ export const PlatformWorkspace: React.FC = () => {
                   )}
 
                   {/* Reviewer Controls */}
-                  {(effectiveRole === "PROJECT_LEAD" ||
-                    effectiveRole === "REVIEWER_SME" ||
-                    effectiveRole === "OUTGOING_DEV") && (
+                  {!isGuestDemo &&
+                    (effectiveRole === "PROJECT_LEAD" ||
+                      effectiveRole === "REVIEWER_SME" ||
+                      effectiveRole === "OUTGOING_DEV") && (
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3 text-xs">
                       <span className="text-slate-400">
                         Review State: <strong className="text-slate-200">{claim.reviewState}</strong>
@@ -830,6 +894,10 @@ export const PlatformWorkspace: React.FC = () => {
                     <div className="rounded border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-xs text-emerald-200">
                       <strong>Recorded Clarification:</strong> {q.answerText}
                     </div>
+                  ) : isGuestDemo ? (
+                    <div className="pt-1 text-xs text-slate-400 italic">
+                      Read-only in Guest Demo mode. Sign in as Outgoing Developer or Project Lead to submit clarification answers.
+                    </div>
                   ) : (
                     <div className="flex gap-2 pt-1">
                       <input
@@ -876,15 +944,17 @@ export const PlatformWorkspace: React.FC = () => {
                   {continuationPlan.approval.status.toUpperCase()}
                 </p>
               </div>
-              <button
-                onClick={handleAcknowledgeReceipt}
-                disabled={continuationPlan.approval.status === "acknowledged"}
-                className="rounded-lg bg-teal-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-teal-500 disabled:bg-slate-700"
-              >
-                {continuationPlan.approval.status === "acknowledged"
-                  ? "Receipt Acknowledged ✓"
-                  : "Acknowledge Handover Receipt"}
-              </button>
+              {!isGuestDemo && (
+                <button
+                  onClick={handleAcknowledgeReceipt}
+                  disabled={continuationPlan.approval.status === "acknowledged"}
+                  className="rounded-lg bg-teal-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-teal-500 disabled:bg-slate-700"
+                >
+                  {continuationPlan.approval.status === "acknowledged"
+                    ? "Receipt Acknowledged ✓"
+                    : "Acknowledge Handover Receipt"}
+                </button>
+              )}
             </div>
 
             {/* Prioritised Next Actions */}
