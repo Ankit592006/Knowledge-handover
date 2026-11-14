@@ -59,6 +59,19 @@ export const PlatformWorkspace: React.FC = () => {
     "Settlement reconciliation worker runs every night at 02:00 UTC. Contact @priya.nair if dead-letter queue exceeds 50 messages."
   );
 
+  const formatApiError = (err: any, fallback: string): string => {
+    const detail = err?.response?.data?.detail;
+    if (!detail) return fallback;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: any) => d?.msg || JSON.stringify(d)).join("; ");
+    }
+    if (typeof detail === "object") {
+      return detail.message || JSON.stringify(detail);
+    }
+    return String(detail);
+  };
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -71,19 +84,31 @@ export const PlatformWorkspace: React.FC = () => {
         await login(email, password);
         setStatusMessage("Logged in successfully.");
       }
-      setActiveTab("dashboard");
+      if (handover) {
+        const demoResp = await apiClient.post("/api/v1/demo/bootstrap-payflow");
+        setHandover(demoResp.data);
+        setActiveTab("review");
+      } else {
+        setActiveTab("dashboard");
+      }
     } catch (err: any) {
       // If account already exists on register, auto-fallback to login for smooth demo UX
       if (authMode === "register" && err?.response?.status === 409) {
         try {
           await login(email, password);
+          if (handover) {
+            const demoResp = await apiClient.post("/api/v1/demo/bootstrap-payflow");
+            setHandover(demoResp.data);
+            setActiveTab("review");
+          } else {
+            setActiveTab("dashboard");
+          }
           setStatusMessage("Existing demo account logged in.");
-          setActiveTab("dashboard");
         } catch (loginErr: any) {
-          setErrorMessage(loginErr?.response?.data?.detail || "Authentication failed.");
+          setErrorMessage(formatApiError(loginErr, "Authentication failed."));
         }
       } else {
-        setErrorMessage(err?.response?.data?.detail || "Authentication failed.");
+        setErrorMessage(formatApiError(err, "Authentication failed."));
       }
     } finally {
       setIsLoading(false);
@@ -101,7 +126,7 @@ export const PlatformWorkspace: React.FC = () => {
       );
       setActiveTab("review");
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Failed to bootstrap PayFlow demo.");
+      setErrorMessage(formatApiError(err, "Failed to bootstrap PayFlow demo."));
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +154,7 @@ export const PlatformWorkspace: React.FC = () => {
       setHandover(recon.data);
       setStatusMessage(`Uploaded source '${newSourceId}' (secrets scanned) and re-ran 3-agent reconstruction.`);
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Upload failed.");
+      setErrorMessage(formatApiError(err, "Upload failed."));
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +178,7 @@ export const PlatformWorkspace: React.FC = () => {
       setHandover(refreshed.data);
       setStatusMessage(`Claim updated to '${newStatus}' (${reviewState}). Audit event recorded.`);
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Failed to update claim.");
+      setErrorMessage(formatApiError(err, "Failed to update claim."));
     }
   };
 
@@ -174,7 +199,7 @@ export const PlatformWorkspace: React.FC = () => {
       setHandover(refreshed.data);
       setStatusMessage("Clarification recorded and linked to claim rationale.");
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Failed to submit clarification.");
+      setErrorMessage(formatApiError(err, "Failed to submit clarification."));
     }
   };
 
@@ -196,7 +221,7 @@ export const PlatformWorkspace: React.FC = () => {
       );
       setActiveTab("successor");
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Approval failed.");
+      setErrorMessage(formatApiError(err, "Approval failed."));
     } finally {
       setIsLoading(false);
     }
@@ -214,7 +239,7 @@ export const PlatformWorkspace: React.FC = () => {
       setContinuationPlan(succResp.data);
       setActiveTab("successor");
     } catch (err: any) {
-      const backendDetail = err?.response?.data?.detail;
+      const backendDetail = formatApiError(err, "");
       setErrorMessage(
         isGuestDemo
           ? `${backendDetail || "Successor view is protected until human approval."} Sign in as a Reviewer or Project Lead to verify claims and approve the handover package.`
@@ -239,7 +264,7 @@ export const PlatformWorkspace: React.FC = () => {
       setContinuationPlan(succResp.data);
       setStatusMessage("Successor receipt acknowledged and recorded in the immutable audit log.");
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Acknowledgement failed.");
+      setErrorMessage(formatApiError(err, "Acknowledgement failed."));
     }
   };
 
@@ -259,7 +284,7 @@ export const PlatformWorkspace: React.FC = () => {
       setAuditLogs(resp.data);
       setActiveTab("audit");
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.detail || "Failed to load audit trail.");
+      setErrorMessage(formatApiError(err, "Failed to load audit trail."));
     }
   };
 
