@@ -1,27 +1,25 @@
-# Judge Demonstration Guide — Knowledge Handover Platform
+# Judge Demonstration Guide — Knowledge Handover Platform (Continuity OS v2.1)
 
-## 1. 3-Minute End-to-End Judge Walkthrough
+## 3-Minute End-to-End Live Walkthrough
 
-1. **Start the Platform**:
-   - Run `docker compose up --build` (or start `uvicorn app.main:app --port 8000` in `backend/` and `npm run dev` in `frontend/`).
-   - Open `http://localhost:5173`.
-2. **Register / Sign In**:
-   - Click **Get Started — Login / Register** and click **Register & Continue** (pre-filled with `preeti.lead@payflow.demo`).
-3. **One-Click PayFlow Seeding & 3-Agent Reconstruction**:
-   - On the Dashboard, click **Seed PayFlow Dataset & Run 3-Agent Reconstruction**.
-   - This seeds the 9 synthetic PayFlow artefacts, redacts pasted credentials in `restricted-vendor-note`, excludes `RESTRICTED` records from the `PUBLIC/INTERNAL` handover scope, and runs the LangGraph 3-Agent pipeline.
-4. **Inspect Conflicts, Stale Docs & Unknown Owners in the Review Workspace**:
-   - Locate `claim-004` (*Payment timeout handling on 3DS2 callback remains blocked*). Observe:
-     - Status badge: **`Conflicting`** (`AI-Generated Draft`).
-     - Owner: **`UNKNOWN (Unassigned in evidence)`** — never invented!
-     - Click **Inspect Citations & Conflicts** to view `issue-104` (`BLOCKED`, 2026-11-06) side-by-side with `notes-2026-10-15` (`IN PROGRESS`, 2026-10-15).
-   - Locate `claim-005` (*Checkout payment creation uses POST /v2/payment-intents*). Observe status **`Potentially outdated`** flagging `doc-legacy-api` (`/v1/payments/charge`) against `pr-218`.
-5. **Answer Clarification Question (Outgoing Developer)**:
-   - Scroll to **Outgoing Developer Clarification Loop**, enter a retry policy answer for ADR-001, and click **Submit Answer**.
-6. **Verify Claims & Approve Package (Reviewer / Project Lead)**:
-   - Click **Mark Verified** on `claim-004`, then click **Approve Handover Package & Unlock Successor View**.
-7. **Successor Continuation Plan & Receipt Acknowledgement**:
-   - Switch the top-right **Perspective** dropdown to **Successor (Incoming Dev)**.
-   - Inspect the **Prioritised Next Actions**, verify that `1 Restricted Source Excluded` is enforced, and click **Acknowledge Handover Receipt**.
-8. **Verify Append-Only Audit Trail**:
-   - Click **Audit Trail** in the top navigation bar to inspect every recorded action and state transition.
+1. **Open the Live Platform (or Start Locally)**:
+   - **Live Cloud URL**: `https://kh-frontend.onrender.com` (Backend API: `https://kh-backend-z2o3.onrender.com/docs`)
+   - **Local**: Run `uvicorn app.main:app --reload --port 8000` in `backend/` and `npm run dev` in `frontend/`, then open `http://localhost:5173`.
+2. **Explore Anonymous Read-Only Guest Demo (`GUEST_DEMO`)**:
+   - On the **Overview** launchpad, click **Try Instant PayFlow Demo (Read-Only)**.
+   - Notice that navigation is strictly limited to `Overview`, `Dashboard`, and `Permitted Sources` (7 sources — `restricted-vendor-note` is filtered out).
+3. **Switch to Outgoing Developer (`OUTGOING_DEV` — Arjun Mehta)**:
+   - Use the top **Active Role Identity** selector (or click **Login / Register** to open the centered Auth Modal) and select **OUTGOING_DEV — Arjun**.
+   - Navigate to **Clarifications & Draft**: answer an open AI-generated clarification question (e.g., ADR-001 webhook retry backoff policy) and click **Submit Answer**. Observe that the linked claim rationale is immediately enriched.
+   - Notice that Arjun can flag claims (`Flag Unresolved`), but **Mark Verified** and **Approve Handover Package** buttons are hidden and blocked (`403`) for `OUTGOING_DEV`.
+4. **Switch to Reviewer / SME (`REVIEWER_SME` — Kavita Rao)**:
+   - Switch **Active Role Identity** to **REVIEWER_SME — Kavita**.
+   - In **Review Workspace**, click **Inspect Evidence & Conflicts** on `claim-004` (`issue-104` vs `notes-2026-10-15`) to view verbatim source excerpts and conflicting timestamps side-by-side in the **Evidence Inspector Modal**.
+   - Click **Mark Verified** on the reviewed claims, then click **Approve Handover Package & Unlock Successor View**. This freezes an immutable `v2` snapshot.
+5. **Switch to Incoming Successor (`SUCCESSOR` — Ankit Chaudhari)**:
+   - Switch **Active Role Identity** to **SUCCESSOR — Ankit**.
+   - In **Successor Plan**, inspect the unlocked **13-Section Continuation Plan** rendered as book-professional cards (including *06 · Ownership Transfer*, *08 · Risks & Blockers*, and *11 · Prioritised Next Actions*).
+   - Click **Export Markdown** or **Export JSON**, then click **Acknowledge Handover Receipt** (exclusively available to `SUCCESSOR`). Notice the 5-step Lifecycle Progress Bar advances to **05 Successor Receipt (Completed)**.
+6. **Switch to Project Lead (`PROJECT_LEAD` — Preeti Mittal) & Inspect Audit Trail / Reset Demo**:
+   - Switch to **PROJECT_LEAD — Preeti**, open **Sources & Ingestion** to see all **8 sources** (including `RESTRICTED` `restricted-vendor-note` with `3 Secrets Redacted`), and open **Audit Trail** to inspect every recorded action.
+   - Click **Reset v1** in the top bar (`POST /api/v1/demo/bootstrap-payflow?reset=true`) to reset the demo back to an unapproved `v1` draft for the next evaluator!

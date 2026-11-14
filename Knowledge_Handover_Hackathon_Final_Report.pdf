@@ -1,0 +1,263 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R 9 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R /F2 12 0 R /F3 13 0 R /F4 14 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 5712 >>
+stream
+0.02 0.30 0.23 rg 36 806 523 18 re f
+BT /F2 8.5 Tf 1 1 1 rg 44 812 Td (KNOWLEDGE HANDOVER - FINAL HACKATHON PROJECT REPORT  |  CONTINUITY OS v2.1) Tj ET
+0.75 0.78 0.82 RG 0.6 w 36 38 m 559 38 l S
+BT /F1 8 Tf 0.35 0.38 0.42 rg 36 26 Td (Team: Preeti Satish Mittal \(Lead\) & Ankit Madanlal Chaudhari  |  https://kh-backend-z2o3.onrender.com) Tj ET
+BT /F2 8 Tf 0.02 0.30 0.23 rg 505 26 Td (Page 1 of 4) Tj ET
+0.93 0.99 0.96 rg 36 692 523 104 re f
+0.02 0.37 0.27 RG 1.2 w 36 692 523 104 re S
+BT /F2 16 Tf 0.01 0.22 0.16 rg 48 774 Td (Knowledge Handover: Intelligent Continuity Platform) Tj ET
+BT /F3 10 Tf 0.02 0.37 0.27 rg 48 757 Td (Agentic, Evidence-Linked, Contradiction-Aware & Human-Approved Engineering Handovers) Tj ET
+BT /F2 9 Tf 0.08 0.12 0.18 rg 48 739 Td (Core Paradigm: "Evidence before assertion; uncertainty shown, never hidden; nothing shared before human approval.") Tj ET
+BT /F1 8.5 Tf 0.15 0.20 0.26 rg 48 722 Td (Team: Preeti Satish Mittal \(Team Leader, AI & Backend\)  |  Ankit Madanlal Chaudhari \(Frontend & Workflow Lead\)) Tj ET
+BT /F4 8 Tf 0.02 0.35 0.25 rg 48 705 Td (Live API: https://kh-backend-z2o3.onrender.com  |  Repo: https://github.com/Ankit592006/Knowledge-handover) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 666.0 Td (1. Executive Summary & Problem Statement) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 662.0 m 559 662.0 l S
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 649.0 Td (When a senior engineer, architect, or technical lead leaves a software project, critical tacit) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 636.8 Td (knowledge evaporates. Architectural rationale, undocumented operational workarounds, in-flight) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 624.6 Td (blockers, and cross-team dependencies remain scattered across fragmented ADRs, pull requests,) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 612.4 Td (issue trackers, sprint notes, and commit logs.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 598.2 Td (* 1. Manual Handovers Are Incomplete & Stale: Engineers under deadline pressure omit) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 586.6 Td (  operational edge cases \(such as manual Redis flushes before database migrations\) or cite) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 575.0 Td (  deprecated endpoints.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 561.9 Td (* 2. Generic LLM Summarizers Hallucinate & Hide Conflicts: Standard RAG tools blend older and) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 550.3 Td (  newer records into fluent prose, hiding contradictions between sprint notes and issue) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 538.7 Td (  trackers.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 525.6 Td (* 3. Unassigned Owners & Missing Rationale Are Fabricated: Generic LLMs guess owners or) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 514.0 Td (  deadlines instead of explicitly reporting 'owner: null' and prompting the outgoing developer) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 502.4 Td (  for clarification.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 489.3 Td (* 4. Secret Leakage & Clearance Violations: Commit notes and hotfix logs often contain live) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 477.7 Td (  API keys, Bearer tokens, or RESTRICTED vendor findings that must never leak to external LLMs) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 466.1 Td (  or unauthorized roles.) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 445.0 Td (2. Six Core Architectural Differentiators \(Why This Solution Wins\)) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 441.0 m 559 441.0 l S
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 428.0 Td (* D1 - Strict Evidence Provenance: Every extracted claim links to a database-verified) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 416.4 Td (  sourceId, character span \(body#chars:start-end\), versionTag, and sourceUpdatedAt timestamp.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 403.3 Td (* D2 - Explicit Contradiction & Staleness Detection: When records disagree \(e.g., ISSUE-104) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 391.7 Td (  says BLOCKED while NOTES-2026-10-15 says IN PROGRESS\), Agent 2 preserves both excerpts side-) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 380.1 Td (  by-side and marks the claim 'conflicting' or 'potentially_outdated'.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 367.0 Td (* D3 - Zero Fabricated Owners or Decisions: Missing decision rationale \(ADR-001 retry backoff) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 355.4 Td (  policy\) and unassigned owners \(ISSUE-104\) remain explicitly null and trigger targeted) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 343.8 Td (  Clarification Questions.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 330.7 Td (* D4 - Deterministic Backend L6 Trust Boundary: Independently validates every AI-cited) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 319.1 Td (  sourceId against scoped project records in PostgreSQL/SQLite, stripping any hallucinated or) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 307.5 Td (  unauthorized citation.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 294.4 Td (* D5 - Mandatory Human Review & Approval Gate: AI agents are schema-prohibited via Pydantic) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 282.8 Td (  field validators from marking any claim 'verified'. Only a human REVIEWER_SME or) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 271.2 Td (  PROJECT_LEAD can verify claims and approve the package.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 258.1 Td (* D6 - Pre-LLM Secret Scrubbing & Prompt-Injection Isolation: Regex redaction scrubs API keys,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 246.5 Td (  tokens, DB URLs, and private keys before storage or LLM calls, while) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 234.9 Td (  sanitize_untrusted_passage\(\) isolates embedded prompt-injection attacks.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R /F2 12 0 R /F3 13 0 R /F4 14 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 6024 >>
+stream
+0.02 0.30 0.23 rg 36 806 523 18 re f
+BT /F2 8.5 Tf 1 1 1 rg 44 812 Td (KNOWLEDGE HANDOVER - FINAL HACKATHON PROJECT REPORT  |  CONTINUITY OS v2.1) Tj ET
+0.75 0.78 0.82 RG 0.6 w 36 38 m 559 38 l S
+BT /F1 8 Tf 0.35 0.38 0.42 rg 36 26 Td (Team: Preeti Satish Mittal \(Lead\) & Ankit Madanlal Chaudhari  |  https://kh-backend-z2o3.onrender.com) Tj ET
+BT /F2 8 Tf 0.02 0.30 0.23 rg 505 26 Td (Page 2 of 4) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 782.0 Td (3. End-to-End 8-Layer System Architecture & Technology Stack) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 778.0 m 559 778.0 l S
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 765.0 Td (* L1 - Role-Aware React 18 SPA \(TypeScript + Vite + Tailwind\): Book-professional editorial UI) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 753.4 Td (  \(Libre Baskerville, Source Serif 4, JetBrains Mono\), 5-Step Lifecycle Stepper, Evidence) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 741.8 Td (  Inspector Modal, 13-Section Continuation Renderer, and Centered Auth Modal.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 728.7 Td (* L2 - FastAPI Security Gateway: Dual-mounted routers \(/api/v1 and /api\), security headers) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 717.1 Td (  \(nosniff, DENY\), Argon2id password hashing, HS256 JWT + Refresh Token rotation, and) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 705.5 Td (  GUEST_DEMO read-only sandbox.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 692.4 Td (* L3 - Explicit RBAC & Classification Clearance Gate \(SEC-01\): Enforces explicit ProjectMember) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 680.8 Td (  roles and filters documents/chunks by PUBLIC, INTERNAL, and RESTRICTED clearance BEFORE RAG) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 669.2 Td (  context assembly.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 656.1 Td (* L4 - Ingestion, Secret Redaction & Vector Indexing: Scrubs credentials \([REDACTED_API_KEY],) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 644.5 Td (  [REDACTED_BEARER_TOKEN]\), chunks documents \(800 chars, 120 overlap\), and generates 384-dim) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 632.9 Td (  embeddings.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 619.8 Td (* L5 - LangGraph 3-Agent StateGraph Orchestrator: Coordinates Agent 1 \(Knowledge Extraction\),) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 608.2 Td (  Agent 2 \(Evidence Verification\), and Agent 3 \(Risk & Dependency Analysis\) with bounded) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 596.6 Td (  retries and stop-on-failure guarantees.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 583.5 Td (* L6 - Deterministic Validation Layer: Verifies every cited sourceId against the database,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 571.9 Td (  computes exact char_start/char_end offsets, downgrades uncited claims to 'unknown', and) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 560.3 Td (  blocks AI 'verified' status.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 547.2 Td (* L7 - Human Review, Approval & Snapshot Engine: Handles claim verification, clarification Q&A) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 535.6 Td (  resolution, immutable HandoverVersion JSON snapshots, Markdown/JSON export, and Successor) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 524.0 Td (  receipt sign-off.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 510.9 Td (* L8 - Hybrid Persistence & Append-Only Audit Trail: PostgreSQL 16 + pgvector HNSW index) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 499.3 Td (  \(vector\(384\)\) in production with SQLite cross-dialect support for local/CI tests, plus an) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 487.7 Td (  immutable AuditLog table.) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 466.6 Td (4. Deep Dive: LangGraph 3-Agent Pipeline & Groq LLM Adapter) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 462.6 m 559 462.6 l S
+BT /F2 10 Tf 0.04 0.35 0.26 rg 36 445.6 Td (4.1 Specialized Multi-Agent Responsibilities) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 433.6 Td (* Agent 1 - Knowledge Extraction Agent: Wraps passages in <untrusted_evidence> tags after) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 422.0 Td (  prompt-injection sanitization. Extracts claims across 8 categories \(project_overview,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 410.4 Td (  technical_context, key_decision, completed_work, active_work, blocked_work, responsibility,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 398.8 Td (  operational_info\) and outputs UnresolvedQuestionSchema items.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 385.7 Td (* Agent 2 - Evidence Verification Agent: Cross-checks claims against passage timestamps. Flags) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 374.1 Td (  status contradictions \(ConflictRecordSchema with both sources\) and stale documentation) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 362.5 Td (  \(PR-218 superseding doc-legacy-api\). Enforces Pydantic validator forbidding 'verified'.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 349.4 Td (* Agent 3 - Risk & Dependency Analysis Agent: Identifies project blockers, operational risks,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 337.8 Td (  and cross-team dependencies \(Finance Ops sandbox cert, Risk-Engine v1.4\) and ranks Next) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 326.2 Td (  Actions for the incoming successor.) Tj ET
+BT /F2 10 Tf 0.04 0.35 0.26 rg 36 309.1 Td (4.2 Dual-Mode OpenAI-Compatible \(Groq\) + Deterministic Extractive Adapter) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 297.1 Td (Configured via LLM_PROVIDER='openai_compatible' in production on Render, invoke_structured_model\(\)) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 284.9 Td (calls Groq \(https://api.groq.com/openai/v1/chat/completions\) using 'llama-3.3-70b-versatile' at) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 272.7 Td (temperature=0.0 with strict Pydantic JSON Schema validation. Also supports local Ollama) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 260.5 Td (\('qwen2.5:7b-instruct'\) and automatic fallback to the deterministic rule-grounded extractor) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 248.3 Td (\('rule-grounded-extractor-v1'\) so demos and CI tests never fail.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R /F2 12 0 R /F3 13 0 R /F4 14 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 5474 >>
+stream
+0.02 0.30 0.23 rg 36 806 523 18 re f
+BT /F2 8.5 Tf 1 1 1 rg 44 812 Td (KNOWLEDGE HANDOVER - FINAL HACKATHON PROJECT REPORT  |  CONTINUITY OS v2.1) Tj ET
+0.75 0.78 0.82 RG 0.6 w 36 38 m 559 38 l S
+BT /F1 8 Tf 0.35 0.38 0.42 rg 36 26 Td (Team: Preeti Satish Mittal \(Lead\) & Ankit Madanlal Chaudhari  |  https://kh-backend-z2o3.onrender.com) Tj ET
+BT /F2 8 Tf 0.02 0.30 0.23 rg 505 26 Td (Page 3 of 4) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 782.0 Td (5. Security Architecture: 5-Role RBAC Matrix & Clearance Scope \(SEC-01\)) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 778.0 m 559 778.0 l S
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 765.0 Td (* PROJECT_LEAD \(preeti.lead@payflow.demo\): Clearance: [PUBLIC, INTERNAL, RESTRICTED]. Full) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 753.4 Td (  governance: views all 8 sources \(including restricted-vendor-note\), uploads sources, runs) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 741.8 Td (  agents, verifies claims, approves package, views Audit Trail & Successor Plan.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 728.7 Td (* OUTGOING_DEV \(arjun.outgoing@payflow.demo\): Clearance: [PUBLIC, INTERNAL]. Outgoing Studio:) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 717.1 Td (  uploads sources, runs reconstruction, answers Clarification Questions, flags claims. Cannot) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 705.5 Td (  mark claims 'verified' or approve.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 692.4 Td (* REVIEWER_SME \(kavita.reviewer@payflow.demo\): Clearance: [PUBLIC, INTERNAL]. Reviewer) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 680.8 Td (  Console: inspects evidence, marks claims 'verified' or 'rejected', approves handover package) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 669.2 Td (  \(freezing snapshot vN\), and inspects Audit Trail.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 656.1 Td (* SUCCESSOR \(ankit.successor@payflow.demo\): Clearance: [PUBLIC, INTERNAL]. Onboarding Hub:) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 644.5 Td (  blocked \(HTTP 403\) while unapproved. Once approved, unlocks the 13-Section Continuation) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 632.9 Td (  Plan, exports Markdown/JSON, and exclusively acknowledges handover receipt.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 619.8 Td (* GUEST_DEMO \(Anonymous Evaluator\): Clearance: [PUBLIC, INTERNAL]. Read-only sandbox scoped) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 608.2 Td (  strictly to synthetic PayFlow demo. Navigation limited to Overview, Dashboard, and Permitted) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 596.6 Td (  Sources \(7 sources\).) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 575.5 Td (6. Traceability Against Round 1 Proposal \(100% Completed\)) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 571.5 m 559 571.5 l S
+BT /F2 10 Tf 0.04 0.35 0.26 rg 36 554.5 Td (6.1 Functional Requirements \(FR-01 to FR-11\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 542.5 Td (FR-01 [COMPLETED] Scoped Source Ingestion & Chunking \(PUBLIC, INTERNAL, RESTRICTED\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 531.7 Td (FR-02 [COMPLETED] Structured Claim & Decision Extraction across 8 Engineering Categories) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 520.9 Td (FR-03 [COMPLETED] Mandatory Evidence Attribution \(sourceId, char offsets, versionTag\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 510.1 Td (FR-04 [COMPLETED] Cross-Artifact Contradiction Detection \(ISSUE-104 vs NOTES-2026-10-15\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 499.3 Td (FR-05 [COMPLETED] 6-State Evidence Vocabulary \(source_supported, conflicting, potentially_outdated, inferred, unknown, verified\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 488.5 Td (FR-06 [COMPLETED] Targeted Clarification Prompting & Dynamic Claim Rationale Enrichment) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 477.7 Td (FR-07 [COMPLETED] Interactive Evidence Inspector Modal with Verbatim Excerpts & Conflict Diffs) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 466.9 Td (FR-08 [COMPLETED] Mandatory Human Review & Approval Gate with Immutable Version Snapshots) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 456.1 Td (FR-09 [COMPLETED] Approval-Gated 13-Section Successor Continuation Plan \(HTTP 403 until approved\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 445.3 Td (FR-10 [COMPLETED] Pre-Indexing Secret Redaction & Adversarial Prompt-Injection Guard) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 434.5 Td (FR-11 [COMPLETED] Self-Contained Handover Export in Markdown and JSON Formats) Tj ET
+BT /F2 10 Tf 0.04 0.35 0.26 rg 36 419.7 Td (6.2 Non-Functional Requirements \(NFR-1 to NFR-7\) & 3-Improvement Framework) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 407.7 Td (* NFR-1 to NFR-7 Delivered: Sub-30s reconstruction with millisecond per-agent telemetry; 100%) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 396.1 Td (  Pydantic v2 schema validation; zero silent fabrication; pre-LLM secret redaction; immutable) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 384.5 Td (  audit logs; automatic deterministic fallback; <= 2 clicks to inspect verbatim source) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 372.9 Td (  evidence.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 359.8 Td (* Round 1 Section 9.2 - Three Improvements Delivered: \(1\) Pre-Indexing Secret & Credential) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 348.2 Td (  Redaction Gate + Prompt Guard, \(2\) Cross-Artifact Contradiction & Staleness Detection) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 336.6 Td (  Engine, \(3\) Targeted Clarification Loop & Approval-Gated 13-Section Continuation Plan.) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R /F2 12 0 R /F3 13 0 R /F4 14 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 5564 >>
+stream
+0.02 0.30 0.23 rg 36 806 523 18 re f
+BT /F2 8.5 Tf 1 1 1 rg 44 812 Td (KNOWLEDGE HANDOVER - FINAL HACKATHON PROJECT REPORT  |  CONTINUITY OS v2.1) Tj ET
+0.75 0.78 0.82 RG 0.6 w 36 38 m 559 38 l S
+BT /F1 8 Tf 0.35 0.38 0.42 rg 36 26 Td (Team: Preeti Satish Mittal \(Lead\) & Ankit Madanlal Chaudhari  |  https://kh-backend-z2o3.onrender.com) Tj ET
+BT /F2 8 Tf 0.02 0.30 0.23 rg 505 26 Td (Page 4 of 4) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 782.0 Td (7. The 13-Section Approval-Gated Successor Continuation Plan) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 778.0 m 559 778.0 l S
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 765.0 Td (Sec 01: Project Overview & Service Charter        | Sec 08: Risks, Blockers & Cross-Team Dependencies) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 754.2 Td (Sec 02: Technical Context & Active API Surface    | Sec 09: Contradictions & Outdated Documentation Audit) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 743.4 Td (Sec 03: Key Architectural Decisions & Rationale   | Sec 10: Clarification Q&A Log \(Outgoing Dev Answers\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 732.6 Td (Sec 04: Completed Milestones & Delivered Work     | Sec 11: Prioritised Next Actions \(Day-1 Onboarding\)) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 721.8 Td (Sec 05: Active & Blocked Work Items \(ISSUE-104\)   | Sec 12: Authorised Source Inventory & Redaction Stats) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 711.0 Td (Sec 06: Ownership Transfer & On-Call Contacts     | Sec 13: Human Approval & Successor Receipt Sign-Off) Tj ET
+BT /F4 8.0 Tf 0.04 0.28 0.20 rg 44 700.2 Td (Sec 07: Operational Runbooks & DB Migration Steps |) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 681.4 Td (8. Ten Extra Production Features Built Beyond Round 1 Proposal) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 677.4 m 559 677.4 l S
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 664.4 Td (* 1. Genuine 4-Persona Backend Role Switcher: POST /api/v1/demo/switch-role mints real) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 652.8 Td (  database JWTs for Project Lead, Outgoing Dev, Reviewer SME, and Successor.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 639.7 Td (* 2. One-Click Live Demo Reset: POST /api/v1/demo/bootstrap-payflow?reset=true resets PayFlow) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 628.1 Td (  to a clean v1 draft while preserving audit history.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 615.0 Td (* 3. 3-Tier Classification Clearance Enforcement: RESTRICTED source \(restricted-vendor-note\)) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 603.4 Td (  is visible to PROJECT_LEAD \(8 sources\) and hidden from other roles \(7 sources\).) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 590.3 Td (* 4. Adversarial Prompt-Injection Isolation: Detects and neutralizes embedded LLM override) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 578.7 Td (  instructions \([ADVERSARIAL_INSTRUCTION_ISOLATED]\) inside uploaded docs.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 565.6 Td (* 5. Per-Agent Telemetry & Provenance Cards: Displays latency \(ms\), attempt counts, active LLM) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 554.0 Td (  provider \(Groq vs fallback\), and L6 citation validation stats.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 540.9 Td (* 6. Interactive 5-Step Lifecycle Stepper: Tracks progress across Sources -> Reconstruction ->) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 529.3 Td (  Review -> Approval -> Successor Receipt.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 516.2 Td (* 7. Governance Audit Trail Explorer: Dedicated Audit Trail UI tab showing append-only actor,) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 504.6 Td (  role, timestamp, and state diff records.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 491.5 Td (* 8. Book-Professional Typography System: Pairs Libre Baskerville headings, Source Serif 4) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 479.9 Td (  body prose, and JetBrains Mono citations.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 466.8 Td (* 9. Native pgvector HNSW + Cross-Dialect SQLite: Production vector\(384\) HNSW cosine search on) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 455.2 Td (  PostgreSQL with seamless SQLite support for local/CI tests.) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 442.1 Td (* 10. Cloud-Native Render Blueprint & Docker Suite: One-click deployment via render.yaml \(kh-) Tj ET
+BT /F1 8.9 Tf 0.10 0.12 0.16 rg 42 430.5 Td (  postgres, kh-backend, kh-frontend\) and multi-stage Dockerfiles.) Tj ET
+BT /F2 12 Tf 0.02 0.30 0.23 rg 36 409.4 Td (9. Database Schema, REST API Surface & Automated Verification) Tj ET
+0.02 0.37 0.27 RG 1.0 w 36 405.4 m 559 405.4 l S
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 392.4 Td (Database Entities \(15 tables/models\): users, refresh_tokens, projects, project_members,) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 380.2 Td (source_documents, document_chunks \(vector\(384\)\), handovers, handover_sources, claims,) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 368.0 Td (claim_evidence_links, risks_and_dependencies, clarification_questions, next_actions,) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 355.8 Td (handover_versions, and audit_logs.) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 341.6 Td (Automated Verification: 10 Backend Pytest integration/security tests \(secret redaction, prompt) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 329.4 Td (injection guard, L6 fake citation stripping, AI verified prohibition, LangGraph halt-on-failure,) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 317.2 Td (E2E lifecycle, SEC-01 RBAC\) + Frontend Vitest suite verifying all 6 evidence status badges and) Tj ET
+BT /F1 9.2 Tf 0.10 0.12 0.16 rg 36 305.0 Td (role-gated navigation.) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>
+endobj
+12 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>
+endobj
+13 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >>
+endobj
+14 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000139 00000 n 
+0000000299 00000 n 
+0000006063 00000 n 
+0000006223 00000 n 
+0000012299 00000 n 
+0000012459 00000 n 
+0000017985 00000 n 
+0000018146 00000 n 
+0000023763 00000 n 
+0000023836 00000 n 
+0000023908 00000 n 
+0000023982 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+24051
+%%EOF

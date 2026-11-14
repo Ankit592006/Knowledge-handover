@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Handover — Final Hackathon Project Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #111827;
+      --ink-muted: #374151;
+      --ink-subtle: #6b7280;
+      --accent: #065f46;
+      --accent-light: #ecfdf5;
+      --accent-border: #6ee7b7;
+      --warn-bg: #fffbeb;
+      --warn-border: #fcd34d;
+      --warn-text: #92400e;
+      --danger-bg: #fff1f2;
+      --danger-border: #fda4af;
+      --danger-text: #9f1239;
+      --border: #d1d5db;
+      --bg-soft: #f9fafb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e5e7eb;
+      color: var(--ink);
+      font-family: "Source Serif 4", Georgia, Cambria, "Times New Roman", serif;
+      font-size: 10.5pt;
+      line-height: 1.62;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #090d16;
+      color: #f9fafb;
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #10b981;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .toolbar-title {
+      font-family: "Libre Baskerville", Georgia, serif;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #ecfdf5;
+    }
+
+    .toolbar-sub {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 8.5pt;
+      color: #6ee7b7;
+      margin-left: 12px;
+    }
+
+    .btn-print {
+      background: #10b981;
+      color: #052e16;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9.5pt;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-print:hover {
+      background: #34d399;
+    }
+
+    .document-container {
+      max-width: 210mm;
+      margin: 24px auto 48px auto;
+      background: #ffffff;
+      padding: 20mm 18mm;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    h1, h2, h3, h4 {
+      font-family: "Libre Baskerville", Georgia, serif;
+      color: #064e3b;
+      margin-top: 1.4em;
+      margin-bottom: 0.5em;
+      line-height: 1.28;
+    }
+
+    h1 {
+      font-size: 21pt;
+      margin-top: 0;
+      color: #022c22;
+    }
+
+    h2 {
+      font-size: 14.5pt;
+      border-bottom: 1.5px solid #065f46;
+      padding-bottom: 5px;
+      margin-top: 1.8em;
+    }
+
+    h3 {
+      font-size: 11.5pt;
+      color: #065f46;
+      margin-top: 1.2em;
+    }
+
+    p {
+      margin: 0.55em 0;
+      text-align: justify;
+    }
+
+    code, pre {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 8.5pt;
+    }
+
+    code {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #065f46;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 12px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+      margin: 10px 0;
+    }
+
+    pre code {
+      background: transparent;
+      border: none;
+      color: inherit;
+      padding: 0;
+    }
+
+    .cover-header {
+      border: 2px solid #064e3b;
+      background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+      padding: 24px 26px;
+      border-radius: 8px;
+      margin-bottom: 22px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #065f46;
+      color: #ffffff;
+    }
+
+    .badge-outline {
+      background: #ffffff;
+      color: #065f46;
+      border: 1px solid #065f46;
+    }
+
+    .paradigm-quote {
+      margin: 14px 0 0 0;
+      padding: 10px 14px;
+      background: #022c22;
+      color: #a7f3d0;
+      border-left: 4px solid #10b981;
+      font-style: italic;
+      font-size: 10.5pt;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid #a7f3d0;
+      font-size: 9.5pt;
+    }
+
+    .meta-item strong {
+      color: #064e3b;
+      font-family: "Libre Baskerville", Georgia, serif;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px 0;
+      font-size: 9pt;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 7px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #064e3b;
+      color: #ffffff;
+      font-family: "Libre Baskerville", Georgia, serif;
+      font-weight: 700;
+      font-size: 8.5pt;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .callout {
+      border-left: 4px solid #059669;
+      background: #ecfdf5;
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      margin: 12px 0;
+      font-size: 9.5pt;
+    }
+
+    .callout-title {
+      font-family: "Libre Baskerville", Georgia, serif;
+      font-weight: 700;
+      color: #065f46;
+      margin-bottom: 4px;
+    }
+
+    .status-pill {
+      display: inline-block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 7.5pt;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    .status-conflict {
+      background: #ffe4e6;
+      color: #9f1239;
+      border-color: #fda4af;
+    }
+
+    .status-warn {
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fcd34d;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 10px 0;
+    }
+
+    .card {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #f8fafc;
+    }
+
+    .card h4 {
+      margin: 0 0 6px 0;
+      font-size: 10pt;
+      color: #064e3b;
+    }
+
+    ul, ol {
+      margin: 6px 0 10px 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .toolbar {
+        display: none !important;
+      }
+      .document-container {
+        margin: 0;
+        padding: 10mm 12mm;
+        max-width: 100%;
+        box-shadow: none;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div>
+      <span class="toolbar-title">Knowledge Handover — Hackathon Winning Project Report</span>
+      <span class="toolbar-sub">Round 1 + Round 2/3 Complete Technical &amp; Product Dossier</span>
+    </div>
+    <button class="btn-print" onclick="window.print()">Download / Save as PDF (Ctrl+P)</button>
+  </div>
+
+  <div class="document-container">
+
+    <!-- COVER / HEADER -->
+    <div class="cover-header">
+      <div class="badge-row">
+        <span class="badge">Final Hackathon Report</span>
+        <span class="badge badge-outline">Continuity OS v2.1</span>
+        <span class="badge badge-outline">LangGraph 3-Agent Pipeline</span>
+        <span class="badge badge-outline">Groq Llama-3.3-70B + Deterministic L6 Gate</span>
+        <span class="badge badge-outline">SEC-01 RBAC &amp; Redaction</span>
+      </div>
+      <h1>Knowledge Handover: Agentic, Evidence-Linked &amp; Human-Approved Software Continuity Platform</h1>
+      <p style="font-size: 11pt; color: #065f46; font-weight: 500; margin-top: 4px;">
+        Eliminating Tacit Engineering Knowledge Loss Through Verifiable Multi-Agent Reconstruction, Contradiction Detection, Pre-LLM Secret Scrubbing, and Role-Gated Human Approval.
+      </p>
+      <div class="paradigm-quote">
+        “Evidence before assertion; uncertainty shown, never hidden; nothing shared before human approval.”
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <strong>Team Members &amp; Roles</strong>
+          1. <b>Preeti Satish Mittal</b> — Team Leader, AI Multi-Agent Architecture, RAG &amp; Backend Security Lead<br/>
+          2. <b>Ankit Madanlal Chaudhari</b> — Frontend Architecture, Role-Aware Product Workflow &amp; UX Lead
+        </div>
+        <div class="meta-item">
+          <strong>Live Production Deployment &amp; Repository</strong>
+          <b>Backend API (Render):</b> <code>https://kh-backend-z2o3.onrender.com</code><br/>
+          <b>Frontend Web App (Render):</b> <code>https://kh-frontend.onrender.com</code><br/>
+          <b>GitHub Repository:</b> <code>https://github.com/Ankit592006/Knowledge-handover.git</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 1 -->
+    <h2>1. Executive Summary &amp; Problem Statement</h2>
+    <p>
+      When a senior software engineer, architect, or technical lead departs a project or transitions between teams, organizations suffer severe <b>tacit knowledge evaporation</b>. Critical architectural rationale, undocumented operational workarounds, in-flight blockers, and cross-team dependencies are scattered across fragmented repositories: Architecture Decision Records (ADRs), pull requests, issue trackers, sprint notes, and commit logs.
+    </p>
+    <p>
+      Existing approaches to engineering handovers fail in four predictable ways:
+    </p>
+    <ol>
+      <li><b>Manual Handover Checklists Are Incomplete &amp; Stale:</b> Outgoing engineers under transition deadline pressure write high-level summaries that omit edge-case workarounds (such as manual cache flushes before schema migrations) or reference deprecated API specifications.</li>
+      <li><b>Generic LLM Summarizers Hallucinate &amp; Hide Contradictions:</b> Standard RAG/chat tools blend old and new documents into fluent prose. When a June specification says <code>POST /v1/payments/charge</code> and an October pull request replaces it with <code>POST /v2/payment-intents</code>, generic LLMs either guess or silently merge them—misleading the incoming successor.</li>
+      <li><b>Unassigned Ownership &amp; Missing Rationale Are Fabricated:</b> Standard generative models fill gaps with plausible-sounding owners or deadlines rather than explicitly flagging that an issue has <code>Assignee: UNASSIGNED</code> or an undecided retry policy.</li>
+      <li><b>Security, Secret Leakage &amp; Clearance Violations:</b> Raw commit notes and hotfix logs frequently contain live API keys, bearer tokens, or <code>RESTRICTED</code> vendor audit findings that must never be sent to external LLM APIs or exposed to unauthorized roles.</li>
+    </ol>
+
+    <div class="callout">
+      <div class="callout-title">The Knowledge Handover Solution</div>
+      <b>Knowledge Handover</b> transforms raw, fragmented engineering artifacts into an <b>evidence-linked, contradiction-aware, human-approved 13-Section Continuation Plan</b>. Every extracted claim is bound to a character-level citation (<code>sourceId</code>, <code>body#chars:start-end</code>, <code>versionTag</code>, <code>sourceUpdatedAt</code>), validated by a deterministic backend trust boundary (Layer L6), and locked behind a role-enforced Human Approval Gate before the incoming successor can access or acknowledge the handover package.
+    </div>
+
+    <!-- SECTION 2 -->
+    <h2>2. Core Architectural Differentiators (Why This Solution Wins)</h2>
+    <div class="two-col">
+      <div class="card">
+        <h4>1. Zero Silent Fabrication (Strict Provenance)</h4>
+        <p>Every claim must link to at least one verified source excerpt. The L6 Deterministic Validation Layer checks every cited <code>source_id</code> against the database and strips any unauthorized or non-existent citation, automatically downgrading unsupported claims to <code>unknown</code>.</p>
+      </div>
+      <div class="card">
+        <h4>2. Contradiction &amp; Staleness Surfacing</h4>
+        <p>When sources disagree (e.g., <code>issue-104</code> reports <code>BLOCKED</code> while <code>notes-2026-10-15</code> reports <code>IN PROGRESS</code>), Agent 2 preserves both citations side-by-side with timestamps and labels the claim <span class="status-pill status-conflict">conflicting</span> or <span class="status-pill status-warn">potentially_outdated</span>.</p>
+      </div>
+      <div class="card">
+        <h4>3. Never Invents Owners or Rationale</h4>
+        <p>If an issue has no assignee or an ADR leaves a retry backoff parameter undecided, the platform preserves <code>owner: null</code>, attaches an explicit uncertainty flag, and auto-generates a targeted Clarification Question for the outgoing engineer.</p>
+      </div>
+      <div class="card">
+        <h4>4. Pre-LLM Secret Scrubbing &amp; Prompt Guard</h4>
+        <p>Before any artifact is chunked, stored, or sent to an LLM, regex redaction scrubs API keys, Bearer tokens, DB URLs, and private keys, while <code>sanitize_untrusted_passage</code> isolates adversarial prompt-injection strings.</p>
+      </div>
+      <div class="card">
+        <h4>5. AI Schema-Prohibited from Marking “Verified”</h4>
+        <p>Pydantic validators on Agent 2 and the L6 backend gate strictly forbid AI from outputting <code>status="verified"</code>. Only an authenticated human <code>REVIEWER_SME</code> or <code>PROJECT_LEAD</code> can transition a claim to <span class="status-pill">verified</span>.</p>
+      </div>
+      <div class="card">
+        <h4>6. Approval-Gated 13-Section Successor Plan</h4>
+        <p>The Incoming Successor is blocked at the API level (<code>HTTP 403</code>) from viewing the Continuation Plan until human approval freezes an immutable <code>HandoverVersion</code> snapshot. Only the <code>SUCCESSOR</code> role can formally acknowledge receipt.</p>
+      </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- SECTION 3 -->
+    <h2>3. End-to-End 8-Layer System Architecture &amp; Technology Stack</h2>
+    <p>
+      The platform is engineered as a cloud-native modular monolith with a strict separation of concerns across 8 architectural layers:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 14%;">Layer</th>
+          <th style="width: 28%;">Component / Module</th>
+          <th style="width: 58%;">Responsibilities &amp; Implementation Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Layer L1</b></td>
+          <td><b>Role-Aware React 18 SPA</b><br/>(<code>frontend/src/</code>)</td>
+          <td>TypeScript + Vite + Tailwind CSS workspace with Book-Professional serif typography (<i>Libre Baskerville</i>, <i>Source Serif 4</i>, <i>JetBrains Mono</i>), 5-Step Lifecycle Stepper, Evidence Inspector Modal, 13-Section Continuation Renderer, and Centered Auth Modal.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L2</b></td>
+          <td><b>API &amp; Security Gateway</b><br/>(<code>app/main.py</code>, <code>app/core/security.py</code>)</td>
+          <td>FastAPI routers mounted at <code>/api/v1</code> and <code>/api</code>, strict security headers (<code>X-Frame-Options: DENY</code>, <code>nosniff</code>), Argon2id password hashing, HS256 JWT verification, and <code>GUEST_DEMO</code> read-only sandbox scoping.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L3</b></td>
+          <td><b>Explicit RBAC &amp; Clearance Gate</b><br/>(<code>SEC-01</code> Enforcement)</td>
+          <td>Verifies explicit <code>ProjectMember</code> membership and filters every source document and RAG chunk by the actor’s <code>allowed_classifications</code> (<code>PUBLIC</code>, <code>INTERNAL</code>, <code>RESTRICTED</code>) <i>before</i> LLM context assembly.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L4</b></td>
+          <td><b>Ingestion, Secret Redaction &amp; Chunking</b><br/>(<code>app/modules/ingestion/</code>)</td>
+          <td>Scans raw uploads for credentials (<code>[REDACTED_API_KEY]</code>, <code>[REDACTED_BEARER_TOKEN]</code>, etc.), splits text into overlapping character chunks (<code>800</code> chars, <code>120</code> overlap), and generates 384-dim vectors.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L5</b></td>
+          <td><b>LangGraph 3-Agent Orchestrator</b><br/>(<code>app/agents/orchestrator/</code>)</td>
+          <td>Executes a compiled <code>StateGraph</code> across <b>Agent 1</b> (Knowledge Extraction), <b>Agent 2</b> (Evidence Verification), and <b>Agent 3</b> (Risk &amp; Dependency Analysis) with bounded retries, stop-on-failure routing, and live Groq LLM + deterministic fallback adapter.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L6</b></td>
+          <td><b>Deterministic Validation Trust Boundary</b><br/>(<code>app/modules/validation/</code>)</td>
+          <td>Independently validates every AI-cited <code>source_id</code> against scoped project records in PostgreSQL/SQLite, computes exact character offsets (<code>char_start</code>, <code>char_end</code>), strips invalid citations, and blocks AI <code>verified</code> status.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L7</b></td>
+          <td><b>Human Review, Approval &amp; Versioning</b><br/>(<code>app/modules/handovers/</code>)</td>
+          <td>Manages claim verification/rejection, clarification Q&amp;A resolution, immutable <code>HandoverVersion</code> JSON snapshot freezing upon approval, Markdown/JSON export, and Successor receipt acknowledgement.</td>
+        </tr>
+        <tr>
+          <td><b>Layer L8</b></td>
+          <td><b>Persistence &amp; Immutable Audit Log</b><br/>(<code>app/models/entities.py</code>)</td>
+          <td>PostgreSQL 16 + <code>pgvector</code> HNSW index (<code>vector(384)</code>) in production with seamless SQLite cross-dialect support for local/CI testing, plus an append-only <code>AuditLog</code> table recording every state transition.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 4 -->
+    <h2>4. Deep Dive: LangGraph 3-Agent Pipeline &amp; Dual-Mode LLM Adapter</h2>
+    <p>
+      The AI reconstruction engine (<code>app/agents/</code>) uses a LangGraph <code>StateGraph</code> state machine with conditional stop-on-failure edges (<code>node_knowledge_extraction</code> $\rightarrow$ <code>node_evidence_verification</code> $\rightarrow$ <code>node_risk_dependency</code>). If any agent fails after bounded retries (<code>LLM_MAX_RETRIES=2</code>), orchestration halts immediately and returns <code>HTTP 503</code> rather than publishing a partial or corrupted handover draft.
+    </p>
+
+    <h3>4.1 The Three Specialized Agents</h3>
+    <ul>
+      <li>
+        <b>Agent 1 — Knowledge Extraction Agent (<code>app/agents/knowledge_extraction/agent.py</code>):</b>
+        Wraps every retrieved passage in <code>&lt;untrusted_evidence source_id='...'&gt;</code> tags after running <code>sanitize_untrusted_passage()</code> to neutralize prompt-injection attempts. Extracts structured <code>CandidateClaimSchema</code> items across 8 types (<code>project_overview</code>, <code>technical_context</code>, <code>key_decision</code>, <code>completed_work</code>, <code>active_work</code>, <code>blocked_work</code>, <code>responsibility</code>, <code>operational_info</code>) and generates <code>UnresolvedQuestionSchema</code> clarifications whenever rationale, runbooks, or owners are missing.
+      </li>
+      <li>
+        <b>Agent 2 — Evidence Verification Agent (<code>app/agents/evidence_verification/agent.py</code>):</b>
+        Cross-examines every candidate claim against the full set of scoped passages and their <code>source_updated_at</code> timestamps. Detects status contradictions (producing <code>ConflictRecordSchema</code> with both excerpts and timestamps), identifies superseded documentation (marking claims <code>potentially_outdated</code>), and enforces a Pydantic <code>@field_validator</code> that raises a <code>ValueError</code> if an LLM ever attempts to output <code>evidence_status="verified"</code>.
+      </li>
+      <li>
+        <b>Agent 3 — Risk &amp; Dependency Analysis Agent (<code>app/agents/risk_dependency/agent.py</code>):</b>
+        Synthesizes explicit project <code>blocker</code>, <code>risk</code>, and <code>dependency</code> records (distinguishing <code>source_supported</code> vs. <code>inferred</code>) and generates a priority-ranked list of actionable onboarding steps (<code>CandidateNextActionSchema</code>) linked directly to claim codes.
+      </li>
+    </ul>
+
+    <h3>4.2 Dual-Mode OpenAI-Compatible (Groq) + Deterministic Extractive Adapter</h3>
+    <p>
+      In <code>app/agents/adapter/llm_adapter.py</code>, <code>invoke_structured_model()</code> supports three runtime providers configured via <code>LLM_PROVIDER</code>:
+    </p>
+    <ol>
+      <li><b>Cloud OpenAI-Compatible Inference (<code>LLM_PROVIDER="openai_compatible"</code> — Production Default on Render):</b> Invokes Groq’s high-speed inference endpoint (<code>https://api.groq.com/openai/v1/chat/completions</code>) with <code>llama-3.3-70b-versatile</code> at <code>temperature=0.0</code>, injecting the exact Pydantic JSON Schema into the system prompt and validating the response via <code>response_schema.model_validate_json()</code>.</li>
+      <li><b>Local Ollama Inference (<code>LLM_PROVIDER="ollama"</code>):</b> Connects to local <code>http://localhost:11434/api/chat</code> with <code>qwen2.5:7b-instruct</code> in JSON mode.</li>
+      <li><b>Transparent Deterministic Fallback (<code>deterministic_extractive</code> / <code>rule-grounded-extractor-v1</code>):</b> If the cloud LLM is unreachable, rate-limited, or unconfigured in CI tests, the adapter seamlessly executes a deterministic, rule-grounded extractor and records the exact provider, latency (<code>ms</code>), and fallback reason in <code>agentTelemetry</code>.</li>
+    </ol>
+
+    <div class="page-break"></div>
+
+    <!-- SECTION 5 -->
+    <h2>5. Security Architecture: RBAC, Clearance &amp; Secret Redaction (SEC-01)</h2>
+    <p>
+      Security is enforced as a first-class architectural invariant rather than a UI cosmetic layer. Every API request passes through multi-tier authentication and authorization checks:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Project Role</th>
+          <th>Demo Persona Identity</th>
+          <th>Clearance Scope</th>
+          <th>Permitted Actions &amp; Visible UI Workspace</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>PROJECT_LEAD</code></td>
+          <td><b>Preeti Mittal</b><br/><code>preeti.lead@payflow.demo</code></td>
+          <td><code>PUBLIC</code>, <code>INTERNAL</code>, <code>RESTRICTED</code></td>
+          <td>Full governance: sees all 8 sources (including <code>restricted-vendor-note</code>), uploads sources, triggers 3-agent reconstruction, answers clarifications, verifies claims, approves package, views Audit Trail, and inspects Successor Plan.</td>
+        </tr>
+        <tr>
+          <td><code>OUTGOING_DEV</code></td>
+          <td><b>Arjun Mehta</b><br/><code>arjun.outgoing@payflow.demo</code></td>
+          <td><code>PUBLIC</code>, <code>INTERNAL</code></td>
+          <td>Outgoing Studio: uploads project sources, triggers reconstruction, answers open Clarification Questions, and flags/annotates claims. <b>Cannot</b> mark claims <code>verified</code> or approve the handover package.</td>
+        </tr>
+        <tr>
+          <td><code>REVIEWER_SME</code></td>
+          <td><b>Kavita Rao</b><br/><code>kavita.reviewer@payflow.demo</code></td>
+          <td><code>PUBLIC</code>, <code>INTERNAL</code></td>
+          <td>Reviewer Console: inspects source evidence, transitions claims to <code>verified</code>, <code>needs_clarification</code>, or <code>rejected</code>, formally approves the handover package (freezing snapshot <code>vN</code>), and inspects the Audit Trail.</td>
+        </tr>
+        <tr>
+          <td><code>SUCCESSOR</code></td>
+          <td><b>Ankit Chaudhari</b><br/><code>ankit.successor@payflow.demo</code></td>
+          <td><code>PUBLIC</code>, <code>INTERNAL</code></td>
+          <td>Onboarding Hub: blocked from viewing unapproved drafts (<code>HTTP 403</code>). Once approved, unlocks the 13-Section Continuation Plan, exports Markdown/JSON, and holds the <b>exclusive permission</b> to Acknowledge Handover Receipt.</td>
+        </tr>
+        <tr>
+          <td><code>GUEST_DEMO</code></td>
+          <td><b>Anonymous Evaluator</b><br/>(Unauthenticated Read-Only)</td>
+          <td><code>PUBLIC</code>, <code>INTERNAL</code></td>
+          <td>Incognito evaluator mode scoped strictly to <code>payflow</code> synthetic demo project. Navigation restricted to Overview, Dashboard, and Permitted Sources (7 non-restricted sources). Zero write/review/approval access.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 6 -->
+    <h2>6. Complete Traceability Against Round 1 Solution Proposal</h2>
+
+    <h3>6.1 Functional Requirements (FR-01 to FR-11 — 100% Completed)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">Req ID</th>
+          <th style="width: 34%;">Round 1 Proposal Requirement</th>
+          <th style="width: 12%;">Status</th>
+          <th style="width: 44%;">Implemented Verification &amp; Code Evidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>FR-01</b></td>
+          <td>Scoped Source Ingestion with classification tags (<code>PUBLIC</code>, <code>INTERNAL</code>, <code>RESTRICTED</code>)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td><code>POST /api/v1/projects/{id}/sources/upload</code> and <code>POST /api/handovers/{id}/sources/import</code>; deterministic chunking and 384-dim vector indexing in <code>app/modules/ingestion/service.py</code>.</td>
+        </tr>
+        <tr>
+          <td><b>FR-02</b></td>
+          <td>Structured Claim &amp; Decision Extraction across project overview, decisions, blockers, risks, and operations</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Agent 1 extracts <code>CandidateClaimSchema</code> items with claim type, rationale, owner, task status, confidence, and evidence pointers.</td>
+        </tr>
+        <tr>
+          <td><b>FR-03</b></td>
+          <td>Mandatory Evidence Attribution (<code>sourceId</code>, <code>location</code>, <code>excerpt</code>, <code>versionTag</code>)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Validated by Layer L6 (<code>validate_claims_against_database</code>) and stored in <code>claim_evidence_links</code> with exact character offsets.</td>
+        </tr>
+        <tr>
+          <td><b>FR-04</b></td>
+          <td>Cross-Artifact Contradiction Detection (preserving both conflicting sources side-by-side)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Agent 2 detects status mismatch between <code>issue-104</code> (<code>BLOCKED</code>, Nov 6) and <code>notes-2026-10-15</code> (<code>IN PROGRESS</code>, Oct 15) and attaches both in <code>ConflictRecordSchema</code>.</td>
+        </tr>
+        <tr>
+          <td><b>FR-05</b></td>
+          <td>6-State Evidence Status Vocabulary &amp; Confidence Scoring</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Implements all 6 statuses: <code>source_supported</code>, <code>conflicting</code>, <code>potentially_outdated</code>, <code>inferred</code>, <code>unknown</code>, and human-only <code>verified</code>.</td>
+        </tr>
+        <tr>
+          <td><b>FR-06</b></td>
+          <td>Targeted Clarification Prompting &amp; Dynamic Claim Enrichment</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Auto-generates open questions for undecided ADR retry policies, unassigned owners, and missing runbooks; answering via <code>POST /api/handovers/{id}/clarifications/{qid}</code> updates linked claims.</td>
+        </tr>
+        <tr>
+          <td><b>FR-07</b></td>
+          <td>Interactive Evidence Inspector Modal (verbatim excerpts &amp; conflict comparison)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Implemented in <code>EvidenceInspectorModal.tsx</code> with character anchors, deterministic verification badges, and side-by-side conflict diffs.</td>
+        </tr>
+        <tr>
+          <td><b>FR-08</b></td>
+          <td>Human Review &amp; Approval Gate (freezing immutable version snapshots)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td><code>PATCH /api/claims/{id}</code> and <code>POST /api/handovers/{id}/approve</code> freeze an immutable <code>HandoverVersion</code> record and log <code>HANDOVER_APPROVED</code>.</td>
+        </tr>
+        <tr>
+          <td><b>FR-09</b></td>
+          <td>Approval-Gated 13-Section Successor Continuation Plan</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td><code>GET /api/handovers/{id}/successor-view</code> enforces <code>HTTP 403</code> until approved, then serves all 13 structured onboarding sections.</td>
+        </tr>
+        <tr>
+          <td><b>FR-10</b></td>
+          <td>Pre-Indexing Secret Redaction &amp; Adversarial Prompt-Injection Guard</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td>Scrubs live secrets before storage/LLM calls and neutralizes embedded prompt overrides (<code>[ADVERSARIAL_INSTRUCTION_ISOLATED]</code>).</td>
+        </tr>
+        <tr>
+          <td><b>FR-11</b></td>
+          <td>Self-Contained Handover Package Export (Markdown &amp; JSON)</td>
+          <td><span class="status-pill">COMPLETED</span></td>
+          <td><code>GET /api/v1/handovers/{id}/export?format_type=markdown|json</code> generates portable archival reports with inline citations.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h3>6.2 The 13-Section Successor Continuation Plan Structure</h3>
+    <p>
+      Once approved by a Reviewer/SME or Project Lead, the platform compiles and unlocks a comprehensive <b>13-Section Continuation Plan</b> tailored for the incoming successor:
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">Section</th>
+          <th style="width: 32%;">Continuation Plan Section Title</th>
+          <th style="width: 58%;">Content Synthesized &amp; Delivered to Incoming Successor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><b>01</b></td><td>Project Overview &amp; Service Charter</td><td>Core architecture summary, service boundaries, and payment orchestration scope.</td></tr>
+        <tr><td><b>02</b></td><td>Technical Context &amp; API Surface</td><td>Active endpoints (<code>POST /v2/payment-intents</code>) vs. deprecated legacy specifications.</td></tr>
+        <tr><td><b>03</b></td><td>Key Architectural Decisions &amp; Rationale</td><td>Approved ADRs (<code>adr-001</code>) plus explicit notes on any undecided parameters.</td></tr>
+        <tr><td><b>04</b></td><td>Completed Milestones &amp; Delivered Work</td><td>Verified completed components (Stripe v2 core adapter, PostgreSQL idempotency ledger).</td></tr>
+        <tr><td><b>05</b></td><td>Active &amp; Blocked Work Items</td><td>In-flight tasks and blocked items (<code>issue-104</code> 3DS2 callback timeout handler).</td></tr>
+        <tr><td><b>06</b></td><td>Ownership Transfer &amp; On-Call Responsibilities</td><td>Departing role charter, transferred claim ownership, and key contacts (<code>@priya.nair</code>).</td></tr>
+        <tr><td><b>07</b></td><td>Operational Runbooks &amp; Deployment Workarounds</td><td>Critical pre-migration steps (manual Redis <code>payflow:idem:*</code> flush during traffic drain).</td></tr>
+        <tr><td><b>08</b></td><td>Risks, Blockers &amp; Cross-Team Dependencies</td><td>Structured high/medium/low risk cards with source and target entities and workarounds.</td></tr>
+        <tr><td><b>09</b></td><td>Contradictions &amp; Potentially Outdated Records</td><td>Side-by-side audit of conflicting timestamps and superseded documentation.</td></tr>
+        <tr><td><b>10</b></td><td>Clarification Q&amp;A Log (Outgoing Dev Responses)</td><td>Complete record of AI-generated questions and human answers from the outgoing engineer.</td></tr>
+        <tr><td><b>11</b></td><td>Prioritised Next Actions (Day-1 Onboarding Plan)</td><td>Rank-ordered action checklist linked to evidence claim codes for immediate execution.</td></tr>
+        <tr><td><b>12</b></td><td>Authorised Source Inventory &amp; Redaction Summary</td><td>Permitted source manifest with classification tags, version tags, and secret redaction counts.</td></tr>
+        <tr><td><b>13</b></td><td>Human Approval &amp; Successor Receipt Sign-Off</td><td>Immutable approval signature, timestamp, version number, and successor receipt record.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 7 -->
+    <h2>7. Extra Production Capabilities Built Beyond the Round 1 Proposal</h2>
+    <p>
+      To elevate the project from a hackathon prototype to an enterprise-ready platform, our team engineered <b>10 major capabilities beyond the original Round 1 Proposal</b>:
+    </p>
+    <ol>
+      <li><b>Genuine 4-Persona Backend Role Switcher (<code>POST /api/v1/demo/switch-role</code>):</b> Issues real, database-backed HS256 JWTs for <code>PROJECT_LEAD</code>, <code>OUTGOING_DEV</code>, <code>REVIEWER_SME</code>, and <code>SUCCESSOR</code> so evaluators can test multi-actor governance workflows in one click.</li>
+      <li><b>One-Click Live Demo Reset (<code>POST /api/v1/demo/bootstrap-payflow?reset=true</code>):</b> Resets the PayFlow handover package back to a clean initial <code>v1</code> draft while preserving the append-only audit trail.</li>
+      <li><b>3-Tier Classification Clearance Filtering (<code>PUBLIC</code>, <code>INTERNAL</code>, <code>RESTRICTED</code>):</b> Demonstrates real data-compartmentalization where <code>restricted-vendor-note</code> is visible to <code>PROJECT_LEAD</code> (8 sources) but automatically filtered out for all other roles (7 sources).</li>
+      <li><b>Adversarial Prompt-Injection Isolation Engine:</b> Detects and neutralizes malicious instructions embedded inside project documents (<code>[ADVERSARIAL_INSTRUCTION_ISOLATED]</code>) before they reach the LLM.</li>
+      <li><b>Per-Agent Telemetry &amp; Model Provenance Cards:</b> Surfaces exact execution latency (<code>ms</code>), attempt counts, model identifier (<code>llama-3.3-70b-versatile</code> vs. <code>rule-grounded-extractor-v1</code>), and L6 validation statistics.</li>
+      <li><b>Interactive 5-Step Lifecycle Progress Bar:</b> Provides real-time visual tracking across <i>01 Sources &amp; Redaction</i> $\rightarrow$ <i>02 3-Agent Reconstruction</i> $\rightarrow$ <i>03 Clarifications &amp; Review</i> $\rightarrow$ <i>04 Human Approval Gate</i> $\rightarrow$ <i>05 Successor Receipt</i>.</li>
+      <li><b>Append-Only Governance Audit Trail Explorer:</b> Dedicated UI tab allowing Project Leads and Reviewers to inspect every state mutation, actor email, IP/role context, and JSON payload diff.</li>
+      <li><b>Book-Professional Editorial Typography System:</b> Pairs <i>Libre Baskerville</i> headings, optical-sized <i>Source Serif 4</i> prose, and <i>JetBrains Mono</i> citations for effortless reading of dense technical handovers.</li>
+      <li><b>Native PostgreSQL <code>pgvector</code> HNSW Indexing + Cross-Dialect SQLite Fallback:</b> Uses <code>vector_cosine_ops</code> HNSW indexes in production PostgreSQL while supporting zero-dependency SQLite execution for fast CI/CD testing.</li>
+      <li><b>Production Render Blueprint (<code>render.yaml</code>) &amp; Multi-Stage Dockerfiles:</b> Full infrastructure-as-code deployment for <code>kh-postgres</code>, <code>kh-backend</code>, and <code>kh-frontend</code>.</li>
+    </ol>
+
+    <!-- SECTION 8 -->
+    <h2>8. Database Schema, API Surface &amp; Automated Verification</h2>
+    <h3>8.1 Relational + Vector Database Schema (11 Core Entities)</h3>
+    <p>
+      Defined in <code>backend/app/models/entities.py</code> and managed via Alembic migrations:
+      <code>users</code>, <code>refresh_tokens</code>, <code>projects</code>, <code>project_members</code>, <code>source_documents</code>, <code>document_chunks</code> (with <code>vector(384)</code> embedding column), <code>handovers</code>, <code>handover_sources</code>, <code>claims</code>, <code>claim_evidence_links</code>, <code>risks_and_dependencies</code>, <code>clarification_questions</code>, <code>next_actions</code>, <code>handover_versions</code>, and <code>audit_logs</code>.
+    </p>
+
+    <h3>8.2 Automated Test Suites (Backend Pytest + Frontend Vitest)</h3>
+    <ul>
+      <li><b>Backend Pytest Suite (10 Comprehensive Tests in <code>backend/tests/</code>):</b> Verifies pre-indexing secret redaction, prompt-injection isolation, AI <code>verified</code> status prohibition, L6 fake citation stripping, LangGraph stop-on-failure halting, full E2E handover reconstruction $\rightarrow$ review $\rightarrow$ approval $\rightarrow$ successor view, and <code>SEC-01</code> RBAC/clearance enforcement.</li>
+      <li><b>Frontend Vitest Suite (<code>frontend/tests/App.test.tsx</code>):</b> Verifies all 6 evidence status badge styles, Guest Demo read-only navigation restrictions, role-specific capabilities for <code>OUTGOING_DEV</code> and <code>REVIEWER_SME</code>, and the Successor locked-pending-approval vs. unlocked 13-section continuation view.</li>
+    </ul>
+
+    <div class="callout" style="margin-top: 24px;">
+      <div class="callout-title">Conclusion — Ready for Enterprise Adoption</div>
+      <b>Knowledge Handover</b> solves one of software engineering’s costliest recurring failures—knowledge loss during team transitions—by combining <b>multi-agent LLM reasoning</b> with <b>deterministic database verification, strict security clearance gates, and mandatory human sign-off</b>.
+    </div>
+
+  </div>
+</body>
+</html>
