@@ -44,10 +44,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveRoleOverride(null);
   };
 
-  const primaryProjectRole: ProjectRole =
-    user?.memberships?.[0]?.project_role || "PROJECT_LEAD";
+  const primaryProjectRole: ProjectRole = !user
+    ? "GUEST_DEMO"
+    : user.memberships?.[0]?.project_role || "PROJECT_LEAD";
 
-  const effectiveRole: ProjectRole = activeRoleOverride || primaryProjectRole;
+  const effectiveRole: ProjectRole = !user
+    ? "GUEST_DEMO"
+    : activeRoleOverride || primaryProjectRole;
 
   return (
     <AuthContext.Provider

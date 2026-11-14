@@ -582,7 +582,6 @@ def get_handover_draft_for_user(
     # Successor cannot access unapproved drafts
     if (
         membership.project_role == ProjectRole.SUCCESSOR.value
-        and user.platform_role != "ADMIN"
         and handover.status not in (HandoverStatus.APPROVED.value, HandoverStatus.ACKNOWLEDGED.value)
     ):
         record_audit_event(

@@ -1,6 +1,6 @@
 """Database engine, session factory, and pgvector / JSONB cross-dialect support."""
 
-from typing import Generator
+from typing import Any, Generator
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -44,14 +44,20 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db() -> None:
-    """Initialize database extensions (pgvector on Postgres if available) and create tables."""
-    if settings.is_postgres:
+def init_db(target_engine: Any = None) -> None:
+    """Initialize database extensions (pgvector on Postgres if available) and create missing tables."""
+    active_engine = target_engine or engine
+    if active_engine.dialect.name == "postgresql":
         try:
-            with engine.begin() as conn:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            with active_engine.begin() as conn:
+                ext_row = conn.execute(
+                    text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
+                ).fetchone()
+                if ext_row is None:
+                    with conn.begin_nested():
+                        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except Exception:
             # Managed Postgres instances without superuser CREATE EXTENSION privilege will continue safely
             pass
     import app.models.entities  # noqa: F401
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=active_engine)

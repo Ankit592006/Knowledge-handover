@@ -6,6 +6,7 @@ from enum import Enum
 class PlatformRole(str, Enum):
     ADMIN = "ADMIN"
     STANDARD = "STANDARD"
+    GUEST_DEMO = "GUEST_DEMO"
 
 
 class ProjectRole(str, Enum):
@@ -13,6 +14,7 @@ class ProjectRole(str, Enum):
     OUTGOING_DEV = "OUTGOING_DEV"
     REVIEWER_SME = "REVIEWER_SME"
     SUCCESSOR = "SUCCESSOR"
+    GUEST_DEMO = "GUEST_DEMO"
 
 
 class AccessClassification(str, Enum):

@@ -5,16 +5,20 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_platform_admin
 from app.models.entities import User
+from app.models.enums import PlatformRole
+from app.modules.audit.service import record_audit_event
 from app.modules.auth.service import (
     authenticate_user,
     build_user_response,
+    provision_admin_user,
     register_user,
     revoke_refresh_token,
     rotate_refresh_token,
 )
 from app.schemas.api_schemas import (
+    AdminUserCreateRequest,
     AuthTokenResponse,
     TokenRefreshRequest,
     UserLoginRequest,
@@ -59,8 +63,27 @@ def current_user_endpoint(
 
 @router.get("/users", response_model=List[UserResponse])
 def list_users_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> List[UserResponse]:
     users = db.query(User).filter(User.is_active.is_(True)).order_by(User.created_at.asc()).all()
+    record_audit_event(
+        db=db,
+        action="ADMIN_USERS_LISTED",
+        target_type="user",
+        target_id="all",
+        actor=current_user,
+        actor_role=PlatformRole.ADMIN.value,
+        new_state={"count": len(users)},
+    )
+    db.commit()
     return [build_user_response(db, u) for u in users]
+
+
+@router.post("/users/admin", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def create_admin_user_endpoint(
+    req: AdminUserCreateRequest,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    return provision_admin_user(db, req, actor=current_user)

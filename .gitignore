@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
 
 # Virtual environments
 .venv/
@@ -10,22 +14,36 @@ ENV/
 
 # Environment variables & secrets (NEVER COMMIT REAL SECRETS)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
 
 # Database & local test artifacts
 *.db
 *.sqlite3
+*.sqlite3-journal
 .pytest_cache/
+backend/.pytest_cache/
 .coverage
+backend/.coverage
 htmlcov/
+backend/htmlcov/
 
-# Frontend dependencies & build
+# Frontend dependencies & build artifacts (keep package-lock.json tracked)
 node_modules/
 frontend/node_modules/
+!frontend/package-lock.json
 frontend/dist/
 frontend/.vite/
+frontend/.vitest/
 coverage/
+frontend/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # IDE & OS files
 .vscode/
@@ -33,3 +51,4 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+

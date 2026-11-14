@@ -28,8 +28,7 @@ def health_check(db: Session = Depends(get_db)) -> HealthCheckResponse:
             ).fetchone()
             pgvector_enabled = ext_row is not None
         else:
-            # Cross-dialect vector storage active in local SQLite dev/test mode
-            pgvector_enabled = True
+            pgvector_enabled = False
     except Exception:
         db_connected = False
 

@@ -10,7 +10,7 @@ import app.models.entities  # noqa: F401
 
 config = context.config
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.normalized_database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

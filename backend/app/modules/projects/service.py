@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_project_membership
 from app.models.entities import Handover, Project, ProjectMember, SourceDocument, User
-from app.models.enums import ProjectRole
+from app.models.enums import PlatformRole, ProjectRole
 from app.modules.audit.service import record_audit_event
 from app.schemas.api_schemas import (
     ProjectCreateRequest,
@@ -44,9 +44,6 @@ def format_project_response(
             )
         )
 
-    if current_user and current_user.platform_role == "ADMIN" and not current_user_role:
-        current_user_role = "ADMIN"
-
     source_count = db.query(SourceDocument).filter(SourceDocument.project_id == project.id).count()
     handover_count = db.query(Handover).filter(Handover.project_id == project.id).count()
 
@@ -67,6 +64,11 @@ def format_project_response(
 
 
 def create_project(db: Session, req: ProjectCreateRequest, creator: User) -> ProjectResponse:
+    if creator.platform_role == PlatformRole.GUEST_DEMO.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest demo users have read-only access and cannot create projects.",
+        )
     existing = db.query(Project).filter(Project.slug == req.slug.strip().lower()).first()
     if existing:
         raise HTTPException(
@@ -109,16 +111,13 @@ def create_project(db: Session, req: ProjectCreateRequest, creator: User) -> Pro
 
 
 def list_user_projects(db: Session, user: User) -> List[ProjectResponse]:
-    if user.platform_role == "ADMIN":
-        projects = db.query(Project).order_by(Project.created_at.desc()).all()
-    else:
-        projects = (
-            db.query(Project)
-            .join(ProjectMember, ProjectMember.project_id == Project.id)
-            .filter(ProjectMember.user_id == user.id)
-            .order_by(Project.created_at.desc())
-            .all()
-        )
+    projects = (
+        db.query(Project)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .filter(ProjectMember.user_id == user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
     return [format_project_response(db, p, user) for p in projects]
 
 
@@ -127,7 +126,7 @@ def get_project_for_user(db: Session, project_id: str, user: User) -> ProjectRes
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
 
-    # Verify membership (raises 403 if user is not a member of this project)
+    # Verify explicit membership (raises 403 if user is not an explicit member of this project)
     get_project_membership(db, project.id, user)
     return format_project_response(db, project, user)
 
@@ -142,8 +141,20 @@ def assign_project_member(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
 
-    # Only PROJECT_LEAD or ADMIN can assign roles
-    get_project_membership(db, project_id, actor, allowed_roles=[ProjectRole.PROJECT_LEAD.value])
+    actor_membership = (
+        db.query(ProjectMember)
+        .filter(ProjectMember.project_id == project_id, ProjectMember.user_id == actor.id)
+        .first()
+    )
+    is_project_lead = (
+        actor_membership is not None
+        and actor_membership.project_role == ProjectRole.PROJECT_LEAD.value
+    )
+    is_platform_admin = actor.platform_role == PlatformRole.ADMIN.value
+
+    if not is_project_lead and not is_platform_admin:
+        # Delegate to get_project_membership so standard 403 + audit event are recorded
+        get_project_membership(db, project_id, actor, allowed_roles=[ProjectRole.PROJECT_LEAD.value])
 
     target_user = db.query(User).filter(User.id == req.user_id).first()
     if not target_user:
@@ -172,13 +183,24 @@ def assign_project_member(
         )
         db.add(new_member)
 
+    audit_action = (
+        "ADMIN_PROJECT_MEMBER_ASSIGNED"
+        if (is_platform_admin and not is_project_lead)
+        else "PROJECT_MEMBER_ASSIGNED"
+    )
+    audit_actor_role = (
+        PlatformRole.ADMIN.value
+        if (is_platform_admin and not is_project_lead)
+        else ProjectRole.PROJECT_LEAD.value
+    )
+
     record_audit_event(
         db=db,
-        action="PROJECT_MEMBER_ASSIGNED",
+        action=audit_action,
         target_type="project_member",
         target_id=req.user_id,
         actor=actor,
-        actor_role=ProjectRole.PROJECT_LEAD.value,
+        actor_role=audit_actor_role,
         project_id=project_id,
         previous_state=prev_state,
         new_state={

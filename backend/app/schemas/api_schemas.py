@@ -43,7 +43,15 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     full_name: str = Field(..., min_length=2, max_length=255)
+    # Public self-registration only permits STANDARD; privileged roles are rejected by register_user
     platform_role: PlatformRole = PlatformRole.STANDARD
+
+
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    platform_role: PlatformRole = PlatformRole.ADMIN
 
 
 class UserLoginRequest(BaseModel):

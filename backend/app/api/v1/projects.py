@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_user_or_guest_demo
 from app.models.entities import User
 from app.modules.projects.service import (
     assign_project_member,
@@ -33,7 +33,7 @@ def create_project_endpoint(
 
 @router.get("/projects", response_model=List[ProjectResponse])
 def list_projects_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> List[ProjectResponse]:
     return list_user_projects(db, current_user)
@@ -42,7 +42,7 @@ def list_projects_endpoint(
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 def get_project_endpoint(
     project_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_or_guest_demo),
     db: Session = Depends(get_db),
 ) -> ProjectResponse:
     return get_project_for_user(db, project_id, current_user)
