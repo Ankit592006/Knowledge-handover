@@ -1426,109 +1426,213 @@ export const PlatformWorkspace: React.FC = () => {
         </div>
       </header>
 
-      {/* Optional Custom Login / Register Modal */}
+      {/* Centered Login / Register Modal Dialog */}
       {showAuthModal && (
-        <div className="border-b border-zinc-800 bg-zinc-900/95 px-4 py-4">
-          <div className="mx-auto max-w-5xl space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-emerald-300">
-                Authenticate via Custom Account or Instant Role Persona
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-zinc-400">Instant Demo Personas:</span>
-                {(
-                  ["PROJECT_LEAD", "OUTGOING_DEV", "REVIEWER_SME", "SUCCESSOR"] as ProjectRole[]
-                ).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      setShowAuthModal(false);
-                      handleSelectRoleSession(r);
-                    }}
-                    className="rounded border border-emerald-500/30 bg-emerald-950/40 px-2 py-1 text-[11px] font-mono text-emerald-300 hover:bg-emerald-500 hover:text-neutral-950 transition"
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <form
-              onSubmit={handleAuthSubmit}
-              className="flex flex-wrap items-end gap-3 pt-1"
-            >
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("login")}
-                  className={`rounded px-2.5 py-1 text-xs font-semibold ${
-                    authMode === "login"
-                      ? "bg-emerald-500 text-neutral-950"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("register")}
-                  className={`rounded px-2.5 py-1 text-xs font-semibold ${
-                    authMode === "register"
-                      ? "bg-emerald-500 text-neutral-950"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
-                  Register
-                </button>
-              </div>
-              {authMode === "register" && (
-                <div>
-                  <label className="block text-[11px] text-zinc-400">Full Name</label>
-                  <input
-                    type="text"
-                    value={authName}
-                    onChange={(e) => setAuthName(e.target.value)}
-                    className="mt-1 rounded border border-zinc-700 bg-neutral-950 px-2.5 py-1 text-xs text-white"
-                    required
-                  />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/80 backdrop-blur-sm p-4"
+          onClick={() => setShowAuthModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Authenticate via Custom Account or Instant Role Persona"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/70"
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-neutral-950/60 px-6 py-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-emerald-300">
+                  Identity & Access Gate · SEC-01
                 </div>
-              )}
-              <div>
-                <label className="block text-[11px] text-zinc-400">Email</label>
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className="mt-1 rounded border border-zinc-700 bg-neutral-950 px-2.5 py-1 text-xs text-white"
-                  required
-                />
+                <h2 className="mt-1.5 text-lg font-bold text-white">
+                  {authMode === "login"
+                    ? "Sign In to Knowledge Handover"
+                    : "Create Your Platform Account"}
+                </h2>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Authenticate with your credentials or switch directly to a pre-provisioned PayFlow persona.
+                </p>
               </div>
-              <div>
-                <label className="block text-[11px] text-zinc-400">Password</label>
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="mt-1 rounded border border-zinc-700 bg-neutral-950 px-2.5 py-1 text-xs text-white"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="rounded bg-emerald-500 px-4 py-1.5 text-xs font-bold text-neutral-950 hover:bg-emerald-400"
-              >
-                {authMode === "login" ? "Sign In" : "Create Account"}
-              </button>
               <button
                 type="button"
                 onClick={() => setShowAuthModal(false)}
-                className="text-xs text-zinc-400 hover:text-white"
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:border-zinc-700 hover:text-white transition"
               >
-                Close
+                Close ✕
               </button>
-            </form>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-5 px-6 py-5">
+              {/* Segmented Login / Register Switcher */}
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-zinc-800 bg-neutral-950 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("login");
+                    setErrorMsg(null);
+                  }}
+                  className={`rounded-lg py-2 text-xs font-semibold transition ${
+                    authMode === "login"
+                      ? "bg-emerald-500 text-neutral-950 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Login to Existing Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("register");
+                    setErrorMsg(null);
+                  }}
+                  className={`rounded-lg py-2 text-xs font-semibold transition ${
+                    authMode === "register"
+                      ? "bg-emerald-500 text-neutral-950 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Register New Account
+                </button>
+              </div>
+
+              {/* Inline Error Inside Modal */}
+              {errorMsg && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-3.5 py-2.5 text-xs text-rose-200">
+                  <span className="font-semibold text-rose-300">Authentication Error: </span>
+                  {errorMsg}
+                </div>
+              )}
+
+              {/* Credentials Form */}
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {authMode === "register" && (
+                  <div>
+                    <label
+                      htmlFor="auth-full-name"
+                      className="block text-xs font-medium text-zinc-300"
+                    >
+                      Full Name
+                    </label>
+                    <input
+                      id="auth-full-name"
+                      type="text"
+                      placeholder="e.g., Ankit Chaudhari"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    htmlFor="auth-email"
+                    className="block text-xs font-medium text-zinc-300"
+                  >
+                    Email Address
+                  </label>
+                  <input
+                    id="auth-email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3.5 py-2.5 text-sm font-mono text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="auth-password"
+                      className="block text-xs font-medium text-zinc-300"
+                    >
+                      Password
+                    </label>
+                    <span className="text-[11px] font-mono text-zinc-500">
+                      Argon2id + JWT HS256
+                    </span>
+                  </div>
+                  <input
+                    id="auth-password"
+                    type="password"
+                    placeholder="Enter your password (min. 8 characters)"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthModal(false)}
+                    className="rounded-lg border border-zinc-700 bg-zinc-800/70 px-4 py-2.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 rounded-lg bg-emerald-500 px-5 py-2.5 text-xs font-bold text-neutral-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50 transition"
+                  >
+                    {loading
+                      ? "Authenticating..."
+                      : authMode === "login"
+                      ? "Sign In to Workspace"
+                      : "Create Account & Sign In"}
+                  </button>
+                </div>
+              </form>
+
+              {/* Instant Role Persona Quick-Login Section */}
+              <div className="border-t border-zinc-800 pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-300">
+                    Instant PayFlow Demo Personas (One-Click JWT)
+                  </span>
+                  <span className="text-[11px] text-zinc-500">No password typing needed</span>
+                </div>
+                <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    ["PROJECT_LEAD", "OUTGOING_DEV", "REVIEWER_SME", "SUCCESSOR"] as ProjectRole[]
+                  ).map((r) => {
+                    const meta = ROLE_METADATA[r];
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setShowAuthModal(false);
+                          handleSelectRoleSession(r);
+                        }}
+                        className="flex flex-col items-start rounded-xl border border-zinc-800 bg-neutral-950/90 px-3 py-2 text-left hover:border-emerald-500/50 hover:bg-emerald-950/25 transition"
+                      >
+                        <div className="flex w-full items-center justify-between gap-1">
+                          <span className="font-mono text-[11px] font-bold text-emerald-300">
+                            {r}
+                          </span>
+                          <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[9px] text-zinc-300">
+                            {meta.clearanceSummary}
+                          </span>
+                        </div>
+                        <span className="mt-0.5 text-xs font-medium text-zinc-200">
+                          {meta.personaName}
+                        </span>
+                        <span className="font-mono text-[10px] text-zinc-400">
+                          {meta.personaEmail}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
