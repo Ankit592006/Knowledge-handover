@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
-from app.models.entities import AuditLog, User
+from app.models.entities import AuditLog, ProjectMember, User
 
 
 def record_audit_event(
@@ -19,12 +19,25 @@ def record_audit_event(
     new_state: Optional[Dict[str, Any]] = None,
 ) -> AuditLog:
     """Append an immutable audit record to audit_logs."""
+    resolved_role = actor_role
+    if not resolved_role and actor is not None and project_id is not None:
+        pm = (
+            db.query(ProjectMember)
+            .filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == actor.id,
+            )
+            .first()
+        )
+        if pm:
+            resolved_role = pm.project_role
+
     entry = AuditLog(
         project_id=project_id,
         handover_id=handover_id,
         actor_user_id=actor.id if actor else None,
         actor_email=actor.email if actor else None,
-        actor_role=actor_role or (actor.platform_role if actor else "ANONYMOUS"),
+        actor_role=resolved_role or (actor.platform_role if actor else "ANONYMOUS"),
         action=action,
         target_type=target_type,
         target_id=target_id,

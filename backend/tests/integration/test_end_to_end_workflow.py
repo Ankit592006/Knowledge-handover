@@ -666,3 +666,428 @@ def test_sec01_admin_project_isolation_explicit_clearance_and_guest_demo_workflo
         assert client.get("/api/v1/users").status_code == 401
         assert client.get("/api/v1/audit-logs").status_code == 401
 
+
+def test_demo_role_persona_switching_and_real_backend_rbac_enforcement() -> None:
+    """
+    Verifies that POST /api/v1/demo/switch-role authenticates distinct backend identities
+    for PROJECT_LEAD, OUTGOING_DEV, REVIEWER_SME, and SUCCESSOR with genuine JWTs,
+    database memberships, clearances, and workflow state continuity across role switches:
+    - Reset restores clean v1 ready_for_review state (not approved/acknowledged).
+    - Outgoing Developer uploads sources and answers clarifications; blocked from successor-view & acknowledge.
+    - Reviewer verifies claims and approves the package; blocked from successor-view & acknowledge.
+    - Project Lead can inspect approved successor-view for governance, but is blocked from acknowledging receipt.
+    - Successor opens the approved continuation plan and acknowledges receipt.
+    - Audit Trail records the actual authenticated actor email and project role for every action.
+    """
+    with TestClient(app) as client:
+        # Reset demo package to clean v1 ready_for_review state
+        reset_resp = client.post("/api/v1/demo/bootstrap-payflow?reset=true")
+        assert reset_resp.status_code == 200
+        reset_draft = reset_resp.json()
+        assert reset_draft["status"] == "ready_for_review"
+        assert reset_draft["currentVersion"] == 1
+        assert reset_draft["approval"]["status"] == "not_approved"
+        assert reset_draft["approval"]["reviewer"] is None
+        assert reset_draft["approval"]["acknowledgedBy"] is None
+        payflow_proj_id = reset_draft["projectId"]
+
+        # 1. Switch to OUTGOING_DEV (arjun.outgoing@payflow.demo)
+        out_switch = client.post(
+            "/api/v1/demo/switch-role",
+            json={"project_role": "OUTGOING_DEV"},
+        )
+        assert out_switch.status_code == 200
+        out_data = out_switch.json()
+        out_token = out_data["access_token"]
+        assert out_data["user"]["email"] == "arjun.outgoing@payflow.demo"
+        out_mem = next(
+            m for m in out_data["user"]["memberships"] if m["project_slug"] == "payflow"
+        )
+        assert out_mem["project_role"] == "OUTGOING_DEV"
+        assert set(out_mem["allowed_classifications"]) == {"PUBLIC", "INTERNAL"}
+
+        # Outgoing Dev uploads a new source document and answers an open clarification question
+        out_upload = client.post(
+            f"/api/v1/projects/{payflow_proj_id}/sources/upload",
+            headers=_auth_header(out_token),
+            json={
+                "stable_source_id": "outgoing-dlq-runbook",
+                "source_type": "technical_doc",
+                "title": "Outgoing Runbook: Webhook DLQ & Retry Backoff",
+                "content": "Use 3 retries (5s, 30s, 300s). Never log sk_live_SYNTHETIC999888777666 in plaintext.",
+                "access_level": "INTERNAL",
+                "version_tag": "v1",
+            },
+        )
+        assert out_upload.status_code == 201
+        assert out_upload.json()["redacted_secrets_count"] >= 1
+
+        draft_resp = client.get(
+            "/api/handovers/payflow-handover-001/draft",
+            headers=_auth_header(out_token),
+        )
+        assert draft_resp.status_code == 200
+        draft = draft_resp.json()
+        first_claim_id = draft["claims"][0]["id"]
+        open_q_id = draft["openQuestions"][0]["id"]
+
+        ans_resp = client.post(
+            f"/api/handovers/payflow-handover-001/clarifications/{open_q_id}",
+            headers=_auth_header(out_token),
+            json={
+                "answer_text": "Retry worker uses 3 exponential backoff attempts and alerts #payments-oncall.",
+                "mark_resolved": True,
+            },
+        )
+        assert ans_resp.status_code == 200
+
+        # Outgoing Dev CANNOT mark claim verified, CANNOT approve handover, CANNOT view audit logs, CANNOT read RESTRICTED source
+        assert (
+            client.patch(
+                f"/api/claims/{first_claim_id}",
+                headers=_auth_header(out_token),
+                json={"status": "verified", "review_state": "approved"},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/handovers/payflow-handover-001/approve",
+                headers=_auth_header(out_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                "/api/v1/handovers/payflow-handover-001/audit-logs",
+                headers=_auth_header(out_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                f"/api/v1/sources/restricted-vendor-note?project_id={payflow_proj_id}",
+                headers=_auth_header(out_token),
+            ).status_code
+            == 403
+        )
+
+        # 2. Switch to SUCCESSOR (ankit.successor@payflow.demo) BEFORE approval
+        succ_switch = client.post(
+            "/api/v1/demo/switch-role",
+            json={"project_role": "SUCCESSOR"},
+        )
+        assert succ_switch.status_code == 200
+        succ_data = succ_switch.json()
+        succ_token = succ_data["access_token"]
+        assert succ_data["user"]["email"] == "ankit.successor@payflow.demo"
+        succ_mem = next(
+            m for m in succ_data["user"]["memberships"] if m["project_slug"] == "payflow"
+        )
+        assert succ_mem["project_role"] == "SUCCESSOR"
+
+        # Successor can check live handover status and permitted PUBLIC/INTERNAL sources, but is blocked (403) from unapproved draft & successor-view
+        status_check = client.get(
+            "/api/handovers/payflow-handover-001/status",
+            headers=_auth_header(succ_token),
+        )
+        assert status_check.status_code == 200
+        assert status_check.json()["status"] == "ready_for_review"
+
+        assert (
+            client.get(
+                "/api/handovers/payflow-handover-001/draft",
+                headers=_auth_header(succ_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                "/api/handovers/payflow-handover-001/successor-view",
+                headers=_auth_header(succ_token),
+            ).status_code
+            == 403
+        )
+
+        # 3. Switch to REVIEWER_SME (kavita.reviewer@payflow.demo)
+        rev_switch = client.post(
+            "/api/v1/demo/switch-role",
+            json={"project_role": "REVIEWER_SME"},
+        )
+        assert rev_switch.status_code == 200
+        rev_data = rev_switch.json()
+        rev_token = rev_data["access_token"]
+        assert rev_data["user"]["email"] == "kavita.reviewer@payflow.demo"
+
+        # Reviewer cannot upload sources (403), but CAN verify claims, approve handover, and view audit logs
+        assert (
+            client.post(
+                f"/api/v1/projects/{payflow_proj_id}/sources/upload",
+                headers=_auth_header(rev_token),
+                json={
+                    "stable_source_id": "rev-upload-blocked",
+                    "source_type": "technical_doc",
+                    "title": "Blocked Reviewer Upload",
+                    "content": "Reviewers cannot upload new sources.",
+                    "access_level": "INTERNAL",
+                },
+            ).status_code
+            == 403
+        )
+
+        verify_resp = client.patch(
+            f"/api/claims/{first_claim_id}",
+            headers=_auth_header(rev_token),
+            json={"status": "verified", "review_state": "approved"},
+        )
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["status"] == "verified"
+
+        approve_resp = client.post(
+            "/api/handovers/payflow-handover-001/approve",
+            headers=_auth_header(rev_token),
+            json={"approval_notes": "Verified by Kavita Rao (Reviewer/SME)."},
+        )
+        assert approve_resp.status_code == 200
+        assert approve_resp.json()["approval"]["status"] == "approved"
+        assert approve_resp.json()["approval"]["reviewer"] == "kavita.reviewer@payflow.demo"
+
+        # Outgoing Dev and Reviewer MUST be blocked (403) from successor-only views and acknowledgement even after approval
+        assert (
+            client.get(
+                "/api/handovers/payflow-handover-001/successor-view",
+                headers=_auth_header(out_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.get(
+                "/api/handovers/payflow-handover-001/successor-view",
+                headers=_auth_header(rev_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/handovers/payflow-handover-001/acknowledge",
+                headers=_auth_header(out_token),
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/handovers/payflow-handover-001/acknowledge",
+                headers=_auth_header(rev_token),
+            ).status_code
+            == 403
+        )
+
+        # Project Lead MUST ALSO be blocked (403) from acknowledging receipt on behalf of Successor
+        lead_switch = client.post(
+            "/api/v1/demo/switch-role",
+            json={"project_role": "PROJECT_LEAD"},
+        )
+        assert lead_switch.status_code == 200
+        lead_token = lead_switch.json()["access_token"]
+        assert (
+            client.post(
+                "/api/handovers/payflow-handover-001/acknowledge",
+                headers=_auth_header(lead_token),
+            ).status_code
+            == 403
+        )
+
+        # 4. Successor opens the approved 13-Section Continuation Plan and acknowledges receipt
+        succ_plan_resp = client.get(
+            "/api/handovers/payflow-handover-001/successor-view",
+            headers=_auth_header(succ_token),
+        )
+        assert succ_plan_resp.status_code == 200
+        assert succ_plan_resp.json()["approval"]["status"] == "approved"
+
+        ack_resp = client.post(
+            "/api/handovers/payflow-handover-001/acknowledge",
+            headers=_auth_header(succ_token),
+            json={"acknowledgement_notes": "Acknowledged by Ankit Chaudhari (Incoming Successor)."},
+        )
+        assert ack_resp.status_code == 200
+        assert ack_resp.json()["approval"]["status"] == "acknowledged"
+        assert ack_resp.json()["approval"]["acknowledgedBy"] == "ankit.successor@payflow.demo"
+
+        # 5. Verify Audit Trail records the exact authenticated actor and role for every action
+        audit_check = client.get(
+            "/api/v1/handovers/payflow-handover-001/audit-logs",
+            headers=_auth_header(lead_token),
+        )
+        assert audit_check.status_code == 200
+        events = audit_check.json()
+
+        upload_event = next(e for e in events if e["action"] == "SOURCE_DOCUMENT_UPLOADED")
+        assert upload_event["actor_email"] == "arjun.outgoing@payflow.demo"
+        assert upload_event["actor_role"] == "OUTGOING_DEV"
+
+        clarify_event = next(e for e in events if e["action"] == "CLARIFICATION_ANSWERED")
+        assert clarify_event["actor_email"] == "arjun.outgoing@payflow.demo"
+        assert clarify_event["actor_role"] == "OUTGOING_DEV"
+
+        verify_event = next(e for e in events if e["action"] == "CLAIM_REVIEW_UPDATED")
+        assert verify_event["actor_email"] == "kavita.reviewer@payflow.demo"
+        assert verify_event["actor_role"] == "REVIEWER_SME"
+
+        approve_event = next(e for e in events if e["action"] == "HANDOVER_APPROVED")
+        assert approve_event["actor_email"] == "kavita.reviewer@payflow.demo"
+        assert approve_event["actor_role"] == "REVIEWER_SME"
+
+        ack_events = [e for e in events if e["action"] == "HANDOVER_RECEIPT_ACKNOWLEDGED"]
+        assert len(ack_events) >= 1
+        assert ack_events[0]["actor_email"] == "ankit.successor@payflow.demo"
+        assert ack_events[0]["actor_role"] == "SUCCESSOR"
+        assert all(e["actor_email"] != "preeti.lead@payflow.demo" for e in ack_events)
+
+        # 6. Leave the synthetic PayFlow demo in a clean, reproducible initial state (v1, ready_for_review, not_approved)
+        final_reset = client.post(
+            "/api/v1/demo/bootstrap-payflow?reset=true",
+            headers=_auth_header(lead_token),
+        )
+        assert final_reset.status_code == 200
+        final_draft = final_reset.json()
+        assert final_draft["status"] == "ready_for_review"
+        assert final_draft["currentVersion"] == 1
+        assert final_draft["approval"]["status"] == "not_approved"
+        assert final_draft["approval"]["reviewer"] is None
+        assert final_draft["approval"]["acknowledgedBy"] is None
+
+
+def test_demo_reset_preserves_immutable_audit_trail_and_appends_reset_event() -> None:
+    """
+    Regression test for immutable audit trail during demo reset:
+    - Existing audit records are never deleted or modified during demo reset.
+    - Reset creates a new DEMO_HANDOVER_RESET_TO_V1 audit event recording who performed the reset and when.
+    - Historical actor identity, role, timestamps, and event details remain preserved.
+    - Demo workflow data resets to v1 (ready_for_review, not_approved) without deleting audit history.
+    """
+    with TestClient(app) as client:
+        # 1. Authenticate as Outgoing Dev, Reviewer, Successor, and Project Lead to generate historical events
+        out_switch = client.post("/api/v1/demo/switch-role", json={"project_role": "OUTGOING_DEV"})
+        assert out_switch.status_code == 200
+        out_token = out_switch.json()["access_token"]
+
+        rev_switch = client.post("/api/v1/demo/switch-role", json={"project_role": "REVIEWER_SME"})
+        assert rev_switch.status_code == 200
+        rev_token = rev_switch.json()["access_token"]
+
+        succ_switch = client.post("/api/v1/demo/switch-role", json={"project_role": "SUCCESSOR"})
+        assert succ_switch.status_code == 200
+        succ_token = succ_switch.json()["access_token"]
+
+        lead_switch = client.post("/api/v1/demo/switch-role", json={"project_role": "PROJECT_LEAD"})
+        assert lead_switch.status_code == 200
+        lead_token = lead_switch.json()["access_token"]
+
+        # Ensure starting from v1 ready_for_review
+        init_resp = client.post(
+            "/api/v1/demo/bootstrap-payflow?reset=true",
+            headers=_auth_header(lead_token),
+        )
+        assert init_resp.status_code == 200
+        init_draft = init_resp.json()
+        first_claim_id = init_draft["claims"][0]["id"]
+        open_q_id = init_draft["openQuestions"][0]["id"]
+
+        # Perform workflow actions across distinct identities
+        ans_resp = client.post(
+            f"/api/handovers/payflow-handover-001/clarifications/{open_q_id}",
+            headers=_auth_header(out_token),
+            json={
+                "answer_text": "Immutable audit test clarification response by Outgoing Dev.",
+                "mark_resolved": True,
+            },
+        )
+        assert ans_resp.status_code == 200
+
+        verify_resp = client.patch(
+            f"/api/claims/{first_claim_id}",
+            headers=_auth_header(rev_token),
+            json={"status": "verified", "review_state": "approved"},
+        )
+        assert verify_resp.status_code == 200
+
+        approve_resp = client.post(
+            "/api/handovers/payflow-handover-001/approve",
+            headers=_auth_header(rev_token),
+            json={"approval_notes": "Approved before reset audit integrity test."},
+        )
+        assert approve_resp.status_code == 200
+
+        ack_resp = client.post(
+            "/api/handovers/payflow-handover-001/acknowledge",
+            headers=_auth_header(succ_token),
+            json={"acknowledgement_notes": "Acknowledged before reset audit integrity test."},
+        )
+        assert ack_resp.status_code == 200
+        assert ack_resp.json()["approval"]["status"] == "acknowledged"
+
+        # 2. Snapshot all existing audit records before reset
+        pre_reset_audit_resp = client.get(
+            "/api/v1/handovers/payflow-handover-001/audit-logs",
+            headers=_auth_header(lead_token),
+        )
+        assert pre_reset_audit_resp.status_code == 200
+        pre_reset_events = pre_reset_audit_resp.json()
+        assert len(pre_reset_events) >= 4
+        pre_reset_by_id = {e["id"]: e for e in pre_reset_events}
+
+        # 3. Perform demo reset as Project Lead (preeti.lead@payflow.demo)
+        reset_resp = client.post(
+            "/api/v1/demo/bootstrap-payflow?reset=true",
+            headers=_auth_header(lead_token),
+        )
+        assert reset_resp.status_code == 200
+        reset_draft = reset_resp.json()
+        assert reset_draft["status"] == "ready_for_review"
+        assert reset_draft["currentVersion"] == 1
+        assert reset_draft["approval"]["status"] == "not_approved"
+        assert reset_draft["approval"]["reviewer"] is None
+        assert reset_draft["approval"]["acknowledgedBy"] is None
+
+        # 4. Fetch audit trail after reset and verify zero deletion/mutation + new reset event appended
+        post_reset_audit_resp = client.get(
+            "/api/v1/handovers/payflow-handover-001/audit-logs",
+            headers=_auth_header(lead_token),
+        )
+        assert post_reset_audit_resp.status_code == 200
+        post_reset_events = post_reset_audit_resp.json()
+        post_reset_by_id = {e["id"]: e for e in post_reset_events}
+
+        # Every pre-reset audit record must still exist with identical actor, role, timestamp, and state details
+        assert len(post_reset_events) > len(pre_reset_events)
+        for event_id, orig in pre_reset_by_id.items():
+            assert event_id in post_reset_by_id, f"Audit record {event_id} ({orig['action']}) was deleted!"
+            preserved = post_reset_by_id[event_id]
+            assert preserved["action"] == orig["action"]
+            assert preserved["actor_email"] == orig["actor_email"]
+            assert preserved["actor_role"] == orig["actor_role"]
+            assert preserved["target_type"] == orig["target_type"]
+            assert preserved["target_id"] == orig["target_id"]
+            assert preserved["previous_state"] == orig["previous_state"]
+            assert preserved["new_state"] == orig["new_state"]
+            assert preserved["created_at"] == orig["created_at"]
+
+        # Verify the newly appended DEMO_HANDOVER_RESET_TO_V1 audit event records who performed the reset and when
+        new_reset_events = [
+            e
+            for e in post_reset_events
+            if e["action"] == "DEMO_HANDOVER_RESET_TO_V1" and e["id"] not in pre_reset_by_id
+        ]
+        assert len(new_reset_events) == 1
+        reset_event = new_reset_events[0]
+        assert reset_event["actor_email"] == "preeti.lead@payflow.demo"
+        assert reset_event["actor_role"] == "PROJECT_LEAD"
+        assert reset_event["target_type"] == "handover"
+        assert reset_event["target_id"] == "payflow-handover-001"
+        assert reset_event["created_at"] is not None
+        assert reset_event["previous_state"]["status"] == "acknowledged"
+        assert reset_event["new_state"]["status"] == "ready_for_review"
+        assert reset_event["new_state"]["current_version"] == 1
+        assert reset_event["new_state"]["reset_by_email"] == "preeti.lead@payflow.demo"
+

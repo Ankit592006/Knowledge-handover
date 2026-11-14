@@ -63,6 +63,10 @@ class TokenRefreshRequest(BaseModel):
     refresh_token: str
 
 
+class DemoRoleSwitchRequest(BaseModel):
+    project_role: ProjectRole
+
+
 class ProjectMembershipBrief(BaseModel):
     project_id: str
     project_slug: str

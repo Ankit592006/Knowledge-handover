@@ -1,15 +1,16 @@
 import React, { createContext, useContext, useState } from "react";
 import { apiClient, clearAuthTokens, setAuthTokens } from "../lib/apiClient";
-import { ProjectRole, UserProfile } from "../lib/types";
+import { AccessClassification, ProjectRole, UserProfile } from "../lib/types";
 
 interface AuthContextValue {
   user: UserProfile | null;
-  activeRoleOverride: ProjectRole | null;
-  setActiveRoleOverride: (role: ProjectRole | null) => void;
   effectiveRole: ProjectRole;
+  allowedClassifications: AccessClassification[];
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserProfile>;
+  register: (email: string, password: string, fullName: string) => Promise<UserProfile>;
+  switchDemoRole: (role: ProjectRole) => Promise<UserProfile | null>;
+  refreshProfile: () => Promise<UserProfile | null>;
   logout: () => void;
 }
 
@@ -17,16 +18,16 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [activeRoleOverride, setActiveRoleOverride] = useState<ProjectRole | null>(null);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<UserProfile> => {
     const resp = await apiClient.post("/api/v1/auth/login", { email, password });
     const { access_token, refresh_token, user: userData } = resp.data;
     setAuthTokens(access_token, refresh_token);
     setUser(userData);
+    return userData;
   };
 
-  const register = async (email: string, password: string, fullName: string) => {
+  const register = async (email: string, password: string, fullName: string): Promise<UserProfile> => {
     const resp = await apiClient.post("/api/v1/auth/register", {
       email,
       password,
@@ -36,32 +37,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { access_token, refresh_token, user: userData } = resp.data;
     setAuthTokens(access_token, refresh_token);
     setUser(userData);
+    return userData;
+  };
+
+  const switchDemoRole = async (role: ProjectRole): Promise<UserProfile | null> => {
+    if (role === "GUEST_DEMO") {
+      clearAuthTokens();
+      setUser(null);
+      return null;
+    }
+    const resp = await apiClient.post("/api/v1/demo/switch-role", {
+      project_role: role,
+    });
+    const { access_token, refresh_token, user: userData } = resp.data;
+    setAuthTokens(access_token, refresh_token);
+    setUser(userData);
+    return userData;
+  };
+
+  const refreshProfile = async (): Promise<UserProfile | null> => {
+    try {
+      const resp = await apiClient.get("/api/v1/auth/me");
+      setUser(resp.data);
+      return resp.data;
+    } catch {
+      return user;
+    }
   };
 
   const logout = () => {
     clearAuthTokens();
     setUser(null);
-    setActiveRoleOverride(null);
   };
 
-  const primaryProjectRole: ProjectRole = !user
-    ? "GUEST_DEMO"
-    : user.memberships?.[0]?.project_role || "PROJECT_LEAD";
+  const activeMembership =
+    user?.memberships?.find((m) => m.project_slug === "payflow") ||
+    user?.memberships?.[0] ||
+    null;
 
   const effectiveRole: ProjectRole = !user
     ? "GUEST_DEMO"
-    : activeRoleOverride || primaryProjectRole;
+    : activeMembership?.project_role || "PROJECT_LEAD";
+
+  const allowedClassifications: AccessClassification[] = !user
+    ? ["PUBLIC", "INTERNAL"]
+    : activeMembership?.allowed_classifications || ["PUBLIC", "INTERNAL"];
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        activeRoleOverride,
-        setActiveRoleOverride,
         effectiveRole,
+        allowedClassifications,
         isAuthenticated: Boolean(user),
         login,
         register,
+        switchDemoRole,
+        refreshProfile,
         logout,
       }}
     >

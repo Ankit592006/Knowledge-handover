@@ -533,7 +533,7 @@ def reconstruct_handover_with_agents(
                 related_claim_code=q.get("related_claim_code"),
                 question=q["question"],
                 reason=q["reason"],
-                status="unknown",
+                status="open",
             )
         )
 
@@ -555,6 +555,12 @@ def reconstruct_handover_with_agents(
     handover.agent_telemetry = telemetry
     handover.summary_text = final_state.get("project_summary", handover.summary_text)
     handover.status = HandoverStatus.READY_FOR_REVIEW.value
+    handover.current_version = 1
+    handover.approved_by = None
+    handover.approved_at = None
+    handover.acknowledged_by = None
+    handover.acknowledged_at = None
+    handover.acknowledgement_notes = None
 
     record_audit_event(
         db=db,
@@ -844,7 +850,12 @@ def build_successor_continuation_plan(
 ) -> SuccessorContinuationPlanResponse:
     """Workflow E: Generate the 13-section Continuation Plan after human approval and second permission check."""
     handover = get_handover_by_id_or_code(db, handover_id_or_code)
-    membership = get_project_membership(db, handover.project_id, user)
+    membership = get_project_membership(
+        db,
+        handover.project_id,
+        user,
+        allowed_roles=[ProjectRole.SUCCESSOR.value, ProjectRole.PROJECT_LEAD.value],
+    )
 
     if handover.status not in (HandoverStatus.APPROVED.value, HandoverStatus.ACKNOWLEDGED.value):
         record_audit_event(
@@ -945,7 +956,7 @@ def acknowledge_handover_receipt(
         db,
         handover.project_id,
         actor,
-        allowed_roles=[ProjectRole.SUCCESSOR.value, ProjectRole.PROJECT_LEAD.value],
+        allowed_roles=[ProjectRole.SUCCESSOR.value],
     )
 
     if handover.status not in (HandoverStatus.APPROVED.value, HandoverStatus.ACKNOWLEDGED.value):

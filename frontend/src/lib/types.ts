@@ -24,12 +24,14 @@ export type ProjectRole =
   | "SUCCESSOR"
   | "GUEST_DEMO";
 
+export type AccessClassification = "PUBLIC" | "INTERNAL" | "RESTRICTED";
+
 export interface ProjectMembershipBrief {
   project_id: string;
   project_slug: string;
   project_name: string;
   project_role: ProjectRole;
-  allowed_classifications: string[];
+  allowed_classifications: AccessClassification[];
 }
 
 export interface UserProfile {
@@ -91,7 +93,7 @@ export interface RiskOrDependencyItem {
   recordType: "blocker" | "risk" | "dependency";
   title: string;
   description: string;
-  severity: "high" | "medium" | "low";
+  severity: "critical" | "high" | "medium" | "low";
   sourceEntity?: string | null;
   targetEntity?: string | null;
   workaround?: string | null;
@@ -155,15 +157,8 @@ export interface HandoverPackage {
   departingRole: string;
   status: string;
   currentVersion: number;
-  project: {
-    name: string;
-    dataClassification: string;
-    asOf: string;
-  };
-  summary: {
-    text: string;
-    reviewState: string;
-  };
+  project: Record<string, unknown>;
+  summary: Record<string, unknown>;
   claims: HandoverClaim[];
   risksAndDependencies: RiskOrDependencyItem[];
   openQuestions: OpenQuestionItem[];
@@ -171,4 +166,36 @@ export interface HandoverPackage {
   approval: ApprovalBlock;
   agentTelemetry: Record<string, unknown>;
   scopedSources: SourceDocumentItem[];
+}
+
+export type ClaimItem = HandoverClaim;
+export type HandoverDraft = HandoverPackage;
+
+export interface SuccessorContinuationPlan {
+  handoverId: string;
+  title: string;
+  version: number;
+  accessScopeApplied: string[];
+  restrictedSourcesFilteredOut: number;
+  sections: Record<string, unknown>;
+  claims: HandoverClaim[];
+  risksAndDependencies: RiskOrDependencyItem[];
+  openQuestions: OpenQuestionItem[];
+  nextActions: NextActionItem[];
+  approval: ApprovalBlock;
+}
+
+export interface AuditLogItem {
+  id: string;
+  project_id?: string | null;
+  handover_id?: string | null;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  previous_state?: Record<string, unknown> | null;
+  new_state?: Record<string, unknown> | null;
+  created_at: string;
 }
