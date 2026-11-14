@@ -1,26 +1,25 @@
 # =============================================================================
-# Render Blueprint (render.yaml) — Isolated Deployment for `preeti-dev` Branch
-# Deploys isolated resources that do NOT overwrite or collide with `main`:
-#   1. kh-postgres-preeti-dev (Managed PostgreSQL + pgvector Database)
-#   2. kh-backend-preeti-dev  (FastAPI + LangGraph Python Web Service)
-#   3. kh-frontend-preeti-dev (React + TypeScript + Vite Static Site)
+# Render Blueprint (render.yaml) — One-Click Full-Stack Deployment
+# Deploys:
+#   1. kh-postgres (Managed PostgreSQL Database)
+#   2. kh-backend  (FastAPI + LangGraph Python Web Service)
+#   3. kh-frontend (React + TypeScript + Vite Static Site)
 # =============================================================================
 
 databases:
-  - name: kh-postgres-preeti-dev
-    databaseName: knowledge_handover_preeti_dev
-    user: kh_user_preeti_dev
+  - name: kh-postgres
+    databaseName: knowledge_handover
+    user: kh_user
     plan: free
 
 services:
-  # 1. FastAPI + LangGraph Backend Web Service (preeti-dev branch)
+  # 1. FastAPI + LangGraph Backend Web Service
   - type: web
-    name: kh-backend-preeti-dev
+    name: kh-backend
     runtime: python
-    branch: preeti-dev
     rootDir: backend
     plan: free
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/v1/health
     envVars:
@@ -32,12 +31,12 @@ services:
         value: "false"
       - key: DATABASE_URL
         fromDatabase:
-          name: kh-postgres-preeti-dev
+          name: kh-postgres
           property: connectionString
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://kh-frontend.onrender.com"
       # Set LLM_PROVIDER to "openai_compatible" and add LLM_BASE_URL + LLM_API_KEY in Render Dashboard
       # (e.g., Groq https://api.groq.com/openai/v1 with llama-3.3-70b-versatile or qwen-2.5-32b)
       # Defaults safely to deterministic_extractive if no external LLM key is provided.
@@ -54,11 +53,10 @@ services:
       - key: EMBEDDING_DIMENSION
         value: "384"
 
-  # 2. React + Vite Frontend Static Site (preeti-dev branch)
+  # 2. React + Vite Frontend Static Site
   - type: web
-    name: kh-frontend-preeti-dev
+    name: kh-frontend
     runtime: static
-    branch: preeti-dev
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
@@ -66,7 +64,7 @@ services:
       - key: VITE_API_BASE_URL
         fromService:
           type: web
-          name: kh-backend-preeti-dev
+          name: kh-backend
           envVarKey: RENDER_EXTERNAL_URL
     routes:
       - type: rewrite

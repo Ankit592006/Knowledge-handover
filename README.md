@@ -94,13 +94,13 @@ npm run dev
 
 ---
 
-## 5. Isolated Render Deployment (`preeti-dev` Branch)
+## 5. Production Render Deployment (`render.yaml`)
 
-[`render.yaml`](render.yaml) is configured specifically for the `preeti-dev` branch with isolated service and database names so deploying `preeti-dev` will **not** collide with or modify existing live `main` branch Render services:
+[`render.yaml`](render.yaml) defines the production Render Blueprint with the existing service and database names:
 
-- **Database**: `kh-postgres-preeti-dev` (`knowledge_handover_preeti_dev`)
-- **Backend Web Service**: `kh-backend-preeti-dev` (`branch: preeti-dev`, `rootDir: backend`, health check `/api/v1/health`)
-- **Frontend Static Site**: `kh-frontend-preeti-dev` (`branch: preeti-dev`, `rootDir: frontend`, `buildCommand: npm ci && npm run build`, SPA rewrite `/* -> /index.html`, `VITE_API_BASE_URL` linked to `kh-backend-preeti-dev`)
+- **Database**: `kh-postgres` (`databaseName: knowledge_handover`, `user: kh_user`)
+- **Backend Web Service**: `kh-backend` (`rootDir: backend`, health check `/api/v1/health`, connected to `kh-postgres` with `EMBEDDING_PROVIDER="deterministic_hash"`, `EMBEDDING_MODEL_NAME="all-MiniLM-L6-v2"`, `EMBEDDING_DIMENSION="384"`)
+- **Frontend Static Site**: `kh-frontend` (`rootDir: frontend`, `buildCommand: npm ci && npm run build`, SPA rewrite `/* -> /index.html`, `VITE_API_BASE_URL` linked to `kh-backend`)
 
 ---
 

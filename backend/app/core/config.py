@@ -4,6 +4,9 @@ from functools import lru_cache
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+LOCAL_DEV_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
+PRODUCTION_FRONTEND_ORIGIN = "https://kh-frontend.onrender.com"
+
 
 class Settings(BaseSettings):
     """Centralized, validated environment settings for the Knowledge Handover backend."""
@@ -20,7 +23,7 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
+    CORS_ORIGINS: str = LOCAL_DEV_CORS_ORIGINS
 
     # Database (defaults to local SQLite for zero-friction local runs if PostgreSQL is not explicitly configured;
     # automatically normalizes Render's postgres:// or postgresql:// URLs to postgresql+psycopg://)
@@ -64,9 +67,28 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> List[str]:
-        origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        is_prod = self.APP_ENV.strip().lower() == "production"
+        raw_origins = self.CORS_ORIGINS
+        if is_prod and raw_origins.strip() == LOCAL_DEV_CORS_ORIGINS:
+            raw_origins = PRODUCTION_FRONTEND_ORIGIN
+
+        origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
         if "*" in origins:
+            if is_prod:
+                raise ValueError(
+                    "Wildcard CORS_ORIGINS ('*') is not permitted in production configuration."
+                )
             return ["*"]
+
+        if is_prod:
+            origins = [
+                o
+                for o in origins
+                if not o.startswith("http://localhost") and not o.startswith("http://127.0.0.1")
+            ]
+            if not origins:
+                return [PRODUCTION_FRONTEND_ORIGIN]
+
         return origins
 
     @property
