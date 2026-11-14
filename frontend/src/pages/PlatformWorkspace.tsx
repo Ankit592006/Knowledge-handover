@@ -247,6 +247,19 @@ export const PlatformWorkspace: React.FC = () => {
   // Evidence Inspector Modal
   const [inspectedClaim, setInspectedClaim] = useState<ClaimItem | null>(null);
 
+  const formatApiError = (err: any, fallback: string): string => {
+    const detail = err?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: any) => d?.msg || JSON.stringify(d)).join("; ");
+    }
+    if (detail && typeof detail === "object") {
+      return (detail as any).message || JSON.stringify(detail);
+    }
+    if (typeof err?.message === "string" && err.message.trim()) return err.message;
+    return fallback;
+  };
+
   // Role-based capability flags (strictly aligned with backend RBAC enforcement)
   const isReadOnlyGuest = !isAuthenticated || effectiveRole === "GUEST_DEMO";
   const canUploadSource =
@@ -480,9 +493,7 @@ export const PlatformWorkspace: React.FC = () => {
       }
     } catch (err: any) {
       setErrorMsg(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to synchronise workspace with backend."
+        formatApiError(err, "Failed to synchronise workspace with backend.")
       );
     } finally {
       setLoading(false);
@@ -525,9 +536,7 @@ export const PlatformWorkspace: React.FC = () => {
       }
     } catch (err: any) {
       setErrorMsg(
-        err?.response?.data?.detail ||
-          err?.message ||
-          `Failed to switch role session to ${targetRole}.`
+        formatApiError(err, `Failed to switch role session to ${targetRole}.`)
       );
     } finally {
       setLoading(false);
@@ -574,7 +583,7 @@ export const PlatformWorkspace: React.FC = () => {
         `Signed in as ${profile.full_name} (${profile.email}) with backend role ${roleOnPayflow}.`
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Authentication failed.");
+      setErrorMsg(formatApiError(err, "Authentication failed."));
     } finally {
       setLoading(false);
     }
@@ -603,7 +612,7 @@ export const PlatformWorkspace: React.FC = () => {
         `Source '${newSourceId}' uploaded by ${user?.email || effectiveRole}, scanned for secrets, chunked, and indexed.`
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Source upload failed.");
+      setErrorMsg(formatApiError(err, "Source upload failed."));
     } finally {
       setLoading(false);
     }
@@ -636,7 +645,7 @@ export const PlatformWorkspace: React.FC = () => {
         "3-Agent LangGraph Pipeline (Extraction -> Verification -> Grounding) completed. Draft v1 is ready for review."
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Agent reconstruction failed.");
+      setErrorMsg(formatApiError(err, "Agent reconstruction failed."));
     } finally {
       setLoading(false);
     }
@@ -671,7 +680,7 @@ export const PlatformWorkspace: React.FC = () => {
         `Claim ${claim.claimId} updated by ${user?.email} to status='${newStatus}', reviewState='${newReviewState}'.`
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Claim update failed (check role permissions).");
+      setErrorMsg(formatApiError(err, "Claim update failed (check role permissions)."));
     } finally {
       setLoading(false);
     }
@@ -699,7 +708,7 @@ export const PlatformWorkspace: React.FC = () => {
         `Clarification response recorded by ${user?.email} (${effectiveRole}) and linked claim rationale enriched.`
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Failed to submit clarification.");
+      setErrorMsg(formatApiError(err, "Failed to submit clarification."));
     } finally {
       setLoading(false);
     }
@@ -735,8 +744,10 @@ export const PlatformWorkspace: React.FC = () => {
       );
     } catch (err: any) {
       setErrorMsg(
-        err?.response?.data?.detail ||
+        formatApiError(
+          err,
           "Approval failed. Only REVIEWER_SME or PROJECT_LEAD can approve handovers."
+        )
       );
     } finally {
       setLoading(false);
@@ -759,8 +770,10 @@ export const PlatformWorkspace: React.FC = () => {
       setActiveTab("successor");
     } catch (err: any) {
       setErrorMsg(
-        err?.response?.data?.detail ||
+        formatApiError(
+          err,
           "Successor View is locked until a Reviewer/SME or Project Lead approves the handover package."
+        )
       );
     } finally {
       setLoading(false);
@@ -786,7 +799,7 @@ export const PlatformWorkspace: React.FC = () => {
       }
       setStatusBanner(`Generated ${formatType.toUpperCase()} export of the approved handover package.`);
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Failed to export handover package.");
+      setErrorMsg(formatApiError(err, "Failed to export handover package."));
     } finally {
       setLoading(false);
     }
@@ -823,7 +836,7 @@ export const PlatformWorkspace: React.FC = () => {
         `Successor Receipt Acknowledged by ${user?.email} (SUCCESSOR)! Knowledge continuity lifecycle is complete and recorded in the immutable audit trail.`
       );
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.detail || "Acknowledgement failed.");
+      setErrorMsg(formatApiError(err, "Acknowledgement failed."));
     } finally {
       setLoading(false);
     }
@@ -841,8 +854,10 @@ export const PlatformWorkspace: React.FC = () => {
       setActiveTab("audit");
     } catch (err: any) {
       setErrorMsg(
-        err?.response?.data?.detail ||
+        formatApiError(
+          err,
           "Audit logs require PROJECT_LEAD or REVIEWER_SME permissions."
+        )
       );
     } finally {
       setLoading(false);
