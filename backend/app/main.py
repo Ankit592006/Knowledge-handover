@@ -34,10 +34,27 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=r"^https://[a-z0-9-]+\.onrender\.com$",
         allow_credentials="*" not in allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/", tags=["System Health"])
+    def root_status() -> dict:
+        return {
+            "status": "online",
+            "service": settings.APP_NAME,
+            "version": settings.APP_VERSION,
+            "environment": settings.APP_ENV,
+            "message": "Knowledge Handover Backend API is running. Use the Frontend URL for the web UI, or /docs for interactive Swagger API documentation.",
+            "endpoints": {
+                "health": "/api/v1/health",
+                "swagger_ui": "/docs",
+                "redoc": "/redoc",
+                "handovers": "/api/handovers",
+            },
+        }
 
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next) -> Response:
