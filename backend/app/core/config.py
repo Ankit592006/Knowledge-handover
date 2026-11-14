@@ -38,11 +38,11 @@ class Settings(BaseSettings):
     # Open-Source AI & RAG Configuration
     # Supported LLM_PROVIDER values: "ollama", "openai_compatible", "deterministic_extractive"
     # For Render / cloud hosting with open-source models (e.g. Groq, Together, OpenRouter, vLLM):
-    # Set LLM_PROVIDER="openai_compatible", LLM_BASE_URL="https://api.groq.com/openai", LLM_API_KEY="gsk_..."
-    LLM_PROVIDER: str = "ollama"
-    LLM_BASE_URL: str = "http://localhost:11434"
+    # Set LLM_PROVIDER="openai_compatible", LLM_BASE_URL="https://api.groq.com/openai/v1", LLM_API_KEY="gsk_..."
+    LLM_PROVIDER: str = "openai_compatible"
+    LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
     LLM_API_KEY: str = ""
-    LLM_MODEL_NAME: str = "qwen2.5:7b-instruct"
+    LLM_MODEL_NAME: str = "llama-3.3-70b-versatile"
     LLM_TIMEOUT_SECONDS: int = 45
     LLM_MAX_RETRIES: int = 2
 

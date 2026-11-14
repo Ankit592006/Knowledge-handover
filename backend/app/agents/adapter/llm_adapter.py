@@ -35,14 +35,15 @@ def invoke_structured_model(
     record the exact provider in telemetry.
     """
     start_ts = time.perf_counter()
-    provider_req = settings.LLM_PROVIDER.lower()
+    active_settings = get_settings()
+    provider_req = active_settings.LLM_PROVIDER.strip().lower()
 
     if provider_req in ("ollama", "openai_compatible"):
         try:
             if provider_req == "ollama":
-                url = f"{settings.LLM_BASE_URL.rstrip('/')}/api/chat"
+                url = f"{active_settings.LLM_BASE_URL.rstrip('/')}/api/chat"
                 payload: Dict[str, Any] = {
-                    "model": settings.LLM_MODEL_NAME,
+                    "model": active_settings.LLM_MODEL_NAME,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -51,7 +52,7 @@ def invoke_structured_model(
                     "stream": False,
                     "options": {"temperature": 0.0},
                 }
-                with httpx.Client(timeout=min(settings.LLM_TIMEOUT_SECONDS, 6.0)) as client:
+                with httpx.Client(timeout=min(active_settings.LLM_TIMEOUT_SECONDS, 6.0)) as client:
                     resp = client.post(url, json=payload)
                     resp.raise_for_status()
                     raw_json = resp.json().get("message", {}).get("content", "{}")
@@ -60,22 +61,25 @@ def invoke_structured_model(
                     return parsed, ModelExecutionMetadata(
                         provider_requested=provider_req,
                         provider_used="ollama_live",
-                        model_name=settings.LLM_MODEL_NAME,
+                        model_name=active_settings.LLM_MODEL_NAME,
                         live_llm_invoked=True,
                         latency_ms=elapsed,
                     )
             else:
-                base = settings.LLM_BASE_URL.rstrip("/")
+                base = active_settings.LLM_BASE_URL.rstrip("/")
+                is_local_host = "localhost" in base or "127.0.0.1" in base
+                if not active_settings.LLM_API_KEY.strip() and not is_local_host:
+                    raise RuntimeError("LLM_API_KEY is not configured for cloud openai_compatible endpoint")
                 url = f"{base}/chat/completions" if base.endswith("/v1") else f"{base}/v1/chat/completions"
                 headers: Dict[str, str] = {"Content-Type": "application/json"}
-                if settings.LLM_API_KEY:
-                    headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
+                if active_settings.LLM_API_KEY.strip():
+                    headers["Authorization"] = f"Bearer {active_settings.LLM_API_KEY.strip()}"
                 schema_hint = (
                     f"\n\nYou MUST output a valid JSON object matching this exact JSON Schema:\n"
                     f"{response_schema.model_json_schema()}"
                 )
                 payload = {
-                    "model": settings.LLM_MODEL_NAME,
+                    "model": active_settings.LLM_MODEL_NAME,
                     "messages": [
                         {"role": "system", "content": system_prompt + schema_hint},
                         {"role": "user", "content": user_prompt},
@@ -83,21 +87,25 @@ def invoke_structured_model(
                     "response_format": {"type": "json_object"},
                     "temperature": 0.0,
                 }
-                with httpx.Client(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
+                with httpx.Client(timeout=active_settings.LLM_TIMEOUT_SECONDS) as client:
                     resp = client.post(url, headers=headers, json=payload)
                     resp.raise_for_status()
-                    raw_json = resp.json()["choices"][0]["message"]["content"]
+                    raw_json = resp.json()["choices"][0]["message"]["content"].strip()
+                    if raw_json.startswith("```"):
+                        raw_json = raw_json.strip("`")
+                        if raw_json.lower().startswith("json"):
+                            raw_json = raw_json[4:].strip()
                     parsed = response_schema.model_validate_json(raw_json)
                     elapsed = round((time.perf_counter() - start_ts) * 1000, 2)
                     return parsed, ModelExecutionMetadata(
                         provider_requested=provider_req,
                         provider_used="openai_compatible_live",
-                        model_name=settings.LLM_MODEL_NAME,
+                        model_name=active_settings.LLM_MODEL_NAME,
                         live_llm_invoked=True,
                         latency_ms=elapsed,
                     )
         except Exception as exc:
-            fallback_reason = f"LLM runtime ({settings.LLM_BASE_URL}) unavailable or schema mismatch: {type(exc).__name__}"
+            fallback_reason = f"LLM runtime ({active_settings.LLM_BASE_URL}) unavailable or schema mismatch: {type(exc).__name__}"
             result = deterministic_extractor()
             elapsed = round((time.perf_counter() - start_ts) * 1000, 2)
             return result, ModelExecutionMetadata(

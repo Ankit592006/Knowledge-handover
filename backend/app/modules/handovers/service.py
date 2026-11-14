@@ -531,8 +531,8 @@ def reconstruct_handover_with_agents(
             ClarificationQuestion(
                 handover_id=handover.id,
                 related_claim_code=q.get("related_claim_code"),
-                question=q["question"],
-                reason=q["reason"],
+                question=q.get("question") or "Clarification required on claim evidence.",
+                reason=q.get("reason") or "Ambiguous or missing rationale in source passages.",
                 status="open",
             )
         )

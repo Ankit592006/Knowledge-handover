@@ -43,10 +43,21 @@ class CandidateClaimSchema(BaseModel):
     missing_info_note: Optional[str] = None
 
 
+class UnresolvedQuestionSchema(BaseModel):
+    related_claim_code: Optional[str] = Field(
+        default=None, description="The claim_code this clarification question relates to"
+    )
+    question: str = Field(..., description="Clarification question for the outgoing engineer")
+    reason: str = Field(
+        default="Ambiguous or missing rationale in source passages.",
+        description="Why this clarification is needed based on the evidence",
+    )
+
+
 class Agent1ExtractionOutput(BaseModel):
     project_summary: str
     candidate_claims: List[CandidateClaimSchema]
-    unresolved_questions: List[Dict[str, str]] = Field(default_factory=list)
+    unresolved_questions: List[UnresolvedQuestionSchema] = Field(default_factory=list)
 
 
 class ConflictRecordSchema(BaseModel):

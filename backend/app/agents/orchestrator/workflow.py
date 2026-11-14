@@ -43,7 +43,10 @@ def node_knowledge_extraction(state: HandoverGraphState) -> HandoverGraphState:
                 **state,
                 "project_summary": out.project_summary,
                 "candidate_claims": [c.model_dump() for c in out.candidate_claims],
-                "unresolved_questions": out.unresolved_questions,
+                "unresolved_questions": [
+                    q.model_dump() if hasattr(q, "model_dump") else dict(q)
+                    for q in out.unresolved_questions
+                ],
                 "agent_telemetry": telemetry,
                 "halted": False,
             }
