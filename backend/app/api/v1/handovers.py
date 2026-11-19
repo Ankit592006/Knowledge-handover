@@ -29,11 +29,14 @@ from app.models.entities import (
 from app.models.enums import PlatformRole, ProjectRole
 from app.modules.audit.service import list_audit_events, record_audit_event
 from app.modules.auth.service import build_user_response
+from app.modules.evaluation.harness import run_payflow_evaluation_harness
 from app.modules.handovers.service import (
     acknowledge_handover_receipt,
     answer_clarification_question,
     approve_handover_package,
+    build_evidence_backed_dependency_map,
     build_successor_continuation_plan,
+    compare_handover_versions,
     create_scoped_handover,
     format_handover_draft,
     get_handover_by_id_or_code,
@@ -55,10 +58,13 @@ from app.schemas.api_schemas import (
     ClaimPatchRequest,
     ClarificationAnswerRequest,
     DemoRoleSwitchRequest,
+    DependencyMapResponse,
+    EvaluationHarnessResponse,
     HandoverApproveRequest,
     HandoverCreateRequest,
     HandoverDraftResponse,
     HandoverSourceImportRequest,
+    HandoverVersionDiffResponse,
     OpenQuestionOutputSchema,
     ProjectCreateRequest,
     SuccessorAcknowledgeRequest,
@@ -633,4 +639,47 @@ def switch_payflow_demo_role_endpoint(
         refresh_token=refresh_token,
         expires_in_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=build_user_response(db, persona_user),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Round 3 Improvement 2 & 3 Endpoints: Evaluation Harness, Dependency Map, Version Diff
+# -----------------------------------------------------------------------------
+@router.get("/evaluation/payflow-benchmark", response_model=EvaluationHarnessResponse)
+def get_payflow_evaluation_benchmark_endpoint() -> EvaluationHarnessResponse:
+    """Run the repeatable Ground-Truth Evaluation Harness comparing Baseline (L6.1) vs Post-Improvement (L6.2)."""
+    return run_payflow_evaluation_harness()
+
+
+@router.get(
+    "/handovers/{handover_id}/dependency-map",
+    response_model=DependencyMapResponse,
+)
+def get_handover_dependency_map_endpoint(
+    handover_id: str,
+    current_user: User = Depends(get_current_user_or_guest_demo),
+    db: Session = Depends(get_db),
+) -> DependencyMapResponse:
+    """Return the Evidence-Backed Dependency Map of people, components, teams, tasks, and unknown owner gaps."""
+    return build_evidence_backed_dependency_map(db, handover_id, current_user)
+
+
+@router.get(
+    "/handovers/{handover_id}/versions/compare",
+    response_model=HandoverVersionDiffResponse,
+)
+def compare_handover_versions_endpoint(
+    handover_id: str,
+    base_version: int = Query(default=1, ge=1),
+    target_version: Optional[int] = Query(default=None, ge=1),
+    current_user: User = Depends(get_current_user_or_guest_demo),
+    db: Session = Depends(get_db),
+) -> HandoverVersionDiffResponse:
+    """Side-by-side comparison of two handover versions (e.g., v1 Initial Draft vs. v2 Approved Package)."""
+    return compare_handover_versions(
+        db=db,
+        handover_id_or_code=handover_id,
+        user=current_user,
+        base_version=base_version,
+        target_version=target_version,
     )

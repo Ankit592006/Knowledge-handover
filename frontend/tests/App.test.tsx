@@ -476,4 +476,88 @@ describe("Knowledge Handover Role-Aware Frontend Suite", () => {
       expect(screen.getByText("Acknowledge Handover Receipt")).toBeDefined();
     });
   });
+
+  it("renders Round 3 improvements: Live GitHub Connector, L6.2 Citation-Support Inspector, Dependency Map with Unknown Owner Gaps, Version Comparison, and Evaluation Harness", async () => {
+    const postSpy = vi.spyOn(apiClient, "post");
+    const getSpy = vi.spyOn(apiClient, "get");
+
+    postSpy
+      .mockResolvedValueOnce({
+        data: {
+          access_token: "jwt-lead",
+          refresh_token: "refresh-lead",
+          user: {
+            id: "user-lead-001",
+            email: "preeti.lead@payflow.demo",
+            full_name: "Preeti Satish Mittal (Project Lead)",
+            platform_role: "STANDARD",
+            is_active: true,
+            created_at: "2026-10-20T00:00:00Z",
+            memberships: [
+              {
+                project_id: "proj-payflow-001",
+                project_slug: "payflow",
+                project_name: "PayFlow",
+                project_role: "PROJECT_LEAD",
+                allowed_classifications: ["PUBLIC", "INTERNAL", "RESTRICTED"],
+              },
+            ],
+          },
+        },
+      } as any)
+      .mockResolvedValueOnce({
+        data: mockPayFlowDraft,
+      } as any);
+    getSpy.mockResolvedValueOnce({ data: mockSources } as any);
+
+    render(<App />);
+    fireEvent.click(screen.getByText("Switch to Project Lead"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Evidence-Backed Dependency Map, Version Comparison & Citation-Support Benchmark/i
+        )
+      ).toBeDefined();
+    });
+
+    // Improvement 3A: Dependency Map shows seeded dependencies & explicit UNKNOWN OWNER GAP
+    expect(
+      screen.getAllByText("Finance Ops / Payment Provider Sandbox Certificate").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Finance Ops Sandbox Approval & Risk-Engine v1.4").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/UNKNOWN OWNER GAP \(PayFlow 3DS2 Timeout Handler/i).length
+    ).toBeGreaterThan(0);
+
+    // Improvement 3B: Switch to Handover Version Comparison (v1 vs v2)
+    fireEvent.click(screen.getAllByText("2. Handover Version Comparison (v1 vs v2)")[0]);
+    expect(screen.getAllByText("RATIONALE_ENRICHED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("OWNER_UPDATED").length).toBeGreaterThan(0);
+
+    // Improvement 2: Switch to Citation-Support Evaluation Harness
+    fireEvent.click(screen.getAllByText("3. Citation-Support Evaluation Harness")[0]);
+    expect(screen.getAllByText("Citation Mismatch Detection Rate").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+100.0%").length).toBeGreaterThan(0);
+
+    // Improvement 1: Open Sources & Ingestion -> verify Live GitHub Repository Connector & Revoke Access button
+    fireEvent.click(screen.getByText("Sources & Ingestion"));
+    expect(screen.getByText("Read-Only GitHub Repository Connector")).toBeDefined();
+    expect(screen.getByText("Import from GitHub & Redact Secrets")).toBeDefined();
+    expect(screen.getAllByText("Revoke Access").length).toBeGreaterThan(0);
+
+    // Improvement 2: Open Review Workspace -> open Evidence Inspector -> verify L6.2 SUPPORTED badge & Flag Mismatch button
+    fireEvent.click(screen.getByText("Review Workspace"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Inspect Citations & Conflicts/i })
+    );
+    expect(
+      screen.getByText(/Round 3 Second-Pass Support Verification/i)
+    ).toBeDefined();
+    expect(
+      screen.getByText("Flag Citation Mismatch (Feed Back)")
+    ).toBeDefined();
+  });
 });

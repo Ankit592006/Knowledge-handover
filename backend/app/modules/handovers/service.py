@@ -29,21 +29,31 @@ from app.models.enums import (
 from app.modules.audit.service import record_audit_event
 from app.modules.ingestion.service import (
     format_source_document,
+    is_source_revoked,
     retrieve_scoped_chunks,
     seed_payflow_sources_for_project,
 )
-from app.modules.validation.service import validate_claims_against_database
+from app.modules.validation.service import (
+    evaluate_citation_support,
+    validate_claims_against_database,
+)
 from app.schemas.api_schemas import (
     ApprovalBlockSchema,
     ClaimOutputSchema,
     ClaimPatchRequest,
+    ClaimVersionDiffSchema,
     ClarificationAnswerRequest,
     ConflictPairSchema,
+    DependencyGraphEdgeSchema,
+    DependencyGraphNodeSchema,
+    DependencyMapResponse,
     EvidenceReferenceSchema,
     HandoverApproveRequest,
     HandoverCreateRequest,
     HandoverDraftResponse,
     HandoverSourceImportRequest,
+    HandoverVersionBriefSchema,
+    HandoverVersionDiffResponse,
     NextActionOutputSchema,
     OpenQuestionOutputSchema,
     RiskDependencyOutputSchema,
@@ -52,21 +62,54 @@ from app.schemas.api_schemas import (
 )
 
 
-def _format_claim_output(claim: Claim) -> ClaimOutputSchema:
-    ev_refs: List[EvidenceReferenceSchema] = [
-        EvidenceReferenceSchema(
-            sourceId=link.stable_source_id,
-            sourceType=link.source_type,
-            location=link.location,
+def _format_claim_output(
+    claim: Claim,
+    visible_links: Optional[List[ClaimEvidenceLink]] = None,
+) -> ClaimOutputSchema:
+    links_to_render = visible_links if visible_links is not None else list(claim.evidence_links)
+    flags = list(claim.uncertainty_flags or [])
+    reviewer_flagged_mismatch = "reviewer_flagged_citation_mismatch" in flags
+
+    override_status: Optional[str] = None
+    for fl in flags:
+        if fl.startswith("citation_support_override:"):
+            override_status = fl.split(":", 1)[1]
+
+    ev_refs: List[EvidenceReferenceSchema] = []
+    verdicts: List[str] = []
+    scores: List[float] = []
+
+    for link in links_to_render:
+        sup_status, sup_score, sup_expl = evaluate_citation_support(
+            claim_text=claim.text,
             excerpt=link.excerpt,
-            charStart=link.char_start,
-            charEnd=link.char_end,
-            versionTag=link.version_tag,
-            sourceUpdatedAt=link.source_updated_at,
-            deterministicVerified=link.deterministic_verified,
         )
-        for link in claim.evidence_links
-    ]
+        if reviewer_flagged_mismatch or override_status == "mismatch":
+            sup_status = "mismatch"
+            sup_score = min(sup_score, 0.15)
+            sup_expl = "Reviewer flagged citation mismatch: Excerpt marked as non-substantiating during human review."
+        elif override_status in ("supported", "weak"):
+            sup_status = override_status
+
+        verdicts.append(sup_status)
+        scores.append(sup_score)
+        ev_refs.append(
+            EvidenceReferenceSchema(
+                sourceId=link.stable_source_id,
+                sourceType=link.source_type,
+                location=link.location,
+                excerpt=link.excerpt,
+                charStart=link.char_start,
+                charEnd=link.char_end,
+                versionTag=link.version_tag,
+                sourceUpdatedAt=link.source_updated_at,
+                deterministicVerified=link.deterministic_verified,
+                supportStatus=sup_status,
+                supportScore=sup_score,
+                supportExplanation=sup_expl,
+            )
+        )
+
     conflicts: List[ConflictPairSchema] = []
     for c in claim.conflict_details or []:
         conflicts.append(
@@ -82,6 +125,14 @@ def _format_claim_output(claim: Claim) -> ClaimOutputSchema:
             )
         )
 
+    overall_support = "supported"
+    if reviewer_flagged_mismatch or override_status == "mismatch" or not verdicts or all(v == "mismatch" for v in verdicts):
+        overall_support = "mismatch"
+    elif override_status == "weak" or "supported" not in verdicts:
+        overall_support = "weak"
+
+    avg_score = round(sum(scores) / len(scores), 2) if scores else 0.0
+
     return ClaimOutputSchema(
         id=claim.id,
         claimId=claim.claim_code,
@@ -93,7 +144,7 @@ def _format_claim_output(claim: Claim) -> ClaimOutputSchema:
         dueDate=claim.due_date,
         status=claim.status,
         evidence=ev_refs,
-        uncertainty=claim.uncertainty_flags or [],
+        uncertainty=flags,
         conflicts=conflicts,
         reviewState=claim.review_state,
         extractionConfidence=claim.extraction_confidence,
@@ -101,6 +152,9 @@ def _format_claim_output(claim: Claim) -> ClaimOutputSchema:
         reviewerNotes=claim.reviewer_notes,
         reviewedBy=claim.reviewed_by,
         reviewedAt=claim.reviewed_at,
+        citationSupportStatus=overall_support,
+        citationSupportScore=avg_score,
+        reviewerFlaggedMismatch=reviewer_flagged_mismatch,
     )
 
 
@@ -112,15 +166,19 @@ def format_handover_draft(
     project = db.query(Project).filter(Project.id == handover.project_id).first()
     effective_scope = set(allowed_classifications or handover.allowed_classifications)
 
+    # Round 3 Improvement 1: Retrieval-time permission & revocation re-check
     scoped_docs: List[SourceDocument] = [
         hs.source_document
         for hs in handover.scoped_sources
-        if hs.source_document and hs.source_document.access_level in effective_scope
+        if hs.source_document
+        and hs.source_document.access_level in effective_scope
+        and not is_source_revoked(hs.source_document)
     ]
+    visible_stable_ids = {sd.stable_source_id for sd in scoped_docs}
 
     claims_out: List[ClaimOutputSchema] = []
     for c in sorted(handover.claims, key=lambda x: x.claim_code):
-        # Filter out claims that rely exclusively on restricted sources outside effective_scope
+        # Filter out claims that rely exclusively on restricted or revoked sources outside effective_scope
         visible_links = [
             lnk
             for lnk in c.evidence_links
@@ -128,25 +186,29 @@ def format_handover_draft(
         ]
         if c.evidence_links and not visible_links:
             continue
-        claims_out.append(_format_claim_output(c))
+        claims_out.append(_format_claim_output(c, visible_links=visible_links))
 
-    risks_out: List[RiskDependencyOutputSchema] = [
-        RiskDependencyOutputSchema(
-            id=r.id,
-            recordType=r.record_type,
-            title=r.title,
-            description=r.description,
-            severity=r.severity,
-            sourceEntity=r.source_entity,
-            targetEntity=r.target_entity,
-            workaround=r.workaround,
-            owner=r.owner_name,
-            status=r.status,
-            evidenceSourceIds=r.evidence_source_ids or [],
-            evidenceClaimIds=r.evidence_claim_ids or [],
+    risks_out: List[RiskDependencyOutputSchema] = []
+    for r in handover.risks_and_dependencies:
+        ev_sids = [sid for sid in (r.evidence_source_ids or []) if not visible_stable_ids or sid in visible_stable_ids]
+        if (r.evidence_source_ids or []) and not ev_sids:
+            continue
+        risks_out.append(
+            RiskDependencyOutputSchema(
+                id=r.id,
+                recordType=r.record_type,
+                title=r.title,
+                description=r.description,
+                severity=r.severity,
+                sourceEntity=r.source_entity,
+                targetEntity=r.target_entity,
+                workaround=r.workaround,
+                owner=r.owner_name,
+                status=r.status,
+                evidenceSourceIds=ev_sids,
+                evidenceClaimIds=r.evidence_claim_ids or [],
+            )
         )
-        for r in handover.risks_and_dependencies
-    ]
 
     questions_out: List[OpenQuestionOutputSchema] = [
         OpenQuestionOutputSchema(
@@ -561,6 +623,33 @@ def reconstruct_handover_with_agents(
     handover.acknowledged_by = None
     handover.acknowledged_at = None
     handover.acknowledgement_notes = None
+    db.flush()
+
+    # Round 3 Improvement 3: Freeze baseline v1 AI Draft Snapshot upon reconstruction for Version Diffing
+    v1_draft_response = format_handover_draft(db, handover)
+    v1_payload = v1_draft_response.model_dump(mode="json")
+    existing_v1 = (
+        db.query(HandoverVersion)
+        .filter(
+            HandoverVersion.handover_id == handover.id,
+            HandoverVersion.version_number == 1,
+        )
+        .first()
+    )
+    if existing_v1:
+        existing_v1.snapshot_payload = v1_payload
+        existing_v1.change_summary = "Initial 3-Agent AI Reconstruction Draft (v1)"
+        existing_v1.created_by = actor.id
+    else:
+        db.add(
+            HandoverVersion(
+                handover_id=handover.id,
+                version_number=1,
+                snapshot_payload=v1_payload,
+                created_by=actor.id,
+                change_summary="Initial 3-Agent AI Reconstruction Draft (v1)",
+            )
+        )
 
     record_audit_event(
         db=db,
@@ -618,7 +707,8 @@ def update_claim_by_reviewer(
 ) -> ClaimOutputSchema:
     query = db.query(Claim)
     if handover_id:
-        query = query.filter(Claim.handover_id == handover_id)
+        resolved_handover = get_handover_by_id_or_code(db, handover_id)
+        query = query.filter(Claim.handover_id == resolved_handover.id)
     claim = query.filter(
         (Claim.id == claim_id_or_code) | (Claim.claim_code == claim_id_or_code)
     ).first()
@@ -674,12 +764,32 @@ def update_claim_by_reviewer(
     if req.reviewer_notes is not None:
         claim.reviewer_notes = req.reviewer_notes.strip()
 
+    # Round 3 Improvement 2: Reviewer-flagged citation mismatch feedback loop
+    current_flags = list(claim.uncertainty_flags or [])
+    if req.flag_citation_mismatch is True:
+        if "reviewer_flagged_citation_mismatch" not in current_flags:
+            current_flags.append("reviewer_flagged_citation_mismatch")
+        telemetry = dict(handover.agent_telemetry or {})
+        telemetry["reviewer_mismatch_feedback_count"] = int(
+            telemetry.get("reviewer_mismatch_feedback_count", 0)
+        ) + 1
+        handover.agent_telemetry = telemetry
+    elif req.flag_citation_mismatch is False:
+        current_flags = [f for f in current_flags if f != "reviewer_flagged_citation_mismatch"]
+
+    if req.citation_support_override in ("supported", "weak", "mismatch"):
+        current_flags = [f for f in current_flags if not f.startswith("citation_support_override:")]
+        current_flags.append(f"citation_support_override:{req.citation_support_override}")
+        if req.citation_support_override == "mismatch" and "reviewer_flagged_citation_mismatch" not in current_flags:
+            current_flags.append("reviewer_flagged_citation_mismatch")
+
+    claim.uncertainty_flags = current_flags
     claim.reviewed_by = actor.id
     claim.reviewed_at = datetime.now(timezone.utc)
 
     record_audit_event(
         db=db,
-        action="CLAIM_REVIEW_UPDATED",
+        action="CITATION_MISMATCH_FLAGGED_BY_REVIEWER" if req.flag_citation_mismatch else "CLAIM_REVIEW_UPDATED",
         target_type="claim",
         target_id=claim.claim_code,
         actor=actor,
@@ -693,6 +803,7 @@ def update_claim_by_reviewer(
             "status": claim.status,
             "review_state": claim.review_state,
             "reviewer_notes": claim.reviewer_notes,
+            "uncertainty_flags": claim.uncertainty_flags,
         },
     )
     db.commit()
@@ -888,6 +999,9 @@ def build_successor_continuation_plan(
     restricted_filtered_count = sum(
         1 for d in total_project_sources if d.access_level not in effective_clearance
     )
+    revoked_filtered_count = sum(
+        1 for d in total_project_sources if is_source_revoked(d)
+    )
 
     draft = format_handover_draft(db, handover, allowed_classifications=effective_clearance)
     active_claims = [c for c in draft.claims if c.reviewState != ClaimReviewState.REJECTED.value]
@@ -936,6 +1050,7 @@ def build_successor_continuation_plan(
         version=draft.currentVersion,
         accessScopeApplied=effective_clearance,
         restrictedSourcesFilteredOut=restricted_filtered_count,
+        revokedSourcesFilteredOut=revoked_filtered_count,
         sections=sections,
         claims=active_claims,
         risksAndDependencies=draft.risksAndDependencies,
@@ -987,3 +1102,461 @@ def acknowledge_handover_receipt(
     db.commit()
     db.refresh(handover)
     return format_handover_draft(db, handover, allowed_classifications=membership.allowed_classifications)
+
+
+# -----------------------------------------------------------------------------
+# Round 3 Improvement 3: Evidence-Backed Dependency Map & Version Comparison
+# -----------------------------------------------------------------------------
+def build_evidence_backed_dependency_map(
+    db: Session,
+    handover_id_or_code: str,
+    user: User,
+) -> DependencyMapResponse:
+    """
+    Construct an interactive map of people, components, teams, and tasks whose edges each carry
+    source evidence or an explicit 'inferred' label, with unknown owners shown as explicit gaps.
+    """
+    handover = get_handover_by_id_or_code(db, handover_id_or_code)
+    membership = get_project_membership(db, handover.project_id, user)
+
+    if (
+        membership.project_role == ProjectRole.SUCCESSOR.value
+        and handover.status not in (HandoverStatus.APPROVED.value, HandoverStatus.ACKNOWLEDGED.value)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dependency map is locked for Successor until handover package is approved.",
+        )
+
+    draft = format_handover_draft(
+        db,
+        handover,
+        allowed_classifications=membership.allowed_classifications,
+    )
+
+    nodes_by_id: Dict[str, DependencyGraphNodeSchema] = {}
+    edges: List[DependencyGraphEdgeSchema] = []
+
+    def ensure_node(
+        node_id: str,
+        label: str,
+        category: str,
+        node_status: str = "source_supported",
+        owner: Optional[str] = None,
+        source_ids: Optional[List[str]] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        if node_id not in nodes_by_id:
+            nodes_by_id[node_id] = DependencyGraphNodeSchema(
+                nodeId=node_id,
+                label=label,
+                category=category,
+                status=node_status,
+                owner=owner,
+                evidenceSourceIds=list(dict.fromkeys(source_ids or [])),
+                metadata=meta or {},
+            )
+        else:
+            existing = nodes_by_id[node_id]
+            merged_sources = list(dict.fromkeys(existing.evidenceSourceIds + (source_ids or [])))
+            existing.evidenceSourceIds = merged_sources
+        return node_id
+
+    edge_counter = 1
+
+    def add_edge(
+        src_node: str,
+        tgt_node: str,
+        relationship: str,
+        support_status: str,
+        severity: str,
+        ev_sources: List[str],
+        ev_claims: List[str],
+        explanation: str,
+    ) -> None:
+        nonlocal edge_counter
+        # Enforce Section 10.1 Invariant: No edge without source evidence or explicit 'inferred' label
+        normalized_support = "source_supported" if (ev_sources and support_status != "inferred") else "inferred"
+        edges.append(
+            DependencyGraphEdgeSchema(
+                edgeId=f"edge-{edge_counter:03d}",
+                sourceNodeId=src_node,
+                targetNodeId=tgt_node,
+                relationship=relationship,
+                supportStatus=normalized_support,
+                severity=severity,
+                evidenceSourceIds=list(dict.fromkeys(ev_sources)),
+                evidenceClaimIds=list(dict.fromkeys(ev_claims)),
+                explanation=explanation,
+            )
+        )
+        edge_counter += 1
+
+    # 1. Add Risk, Blocker & Cross-Team Dependency Nodes & Edges (e.g. Finance Ops sandbox cert, Risk-Engine v1.4)
+    for rd in draft.risksAndDependencies:
+        src_label = rd.sourceEntity or rd.title
+        tgt_label = rd.targetEntity or "Downstream Dependency Target"
+        src_id = f"comp-{src_label.lower().replace(' ', '-')[:40]}"
+        tgt_id = f"team-{tgt_label.lower().replace(' ', '-')[:40]}"
+
+        ev_sids = list(rd.evidenceSourceIds or [])
+        ev_cids = list(rd.evidenceClaimIds or [])
+        sup_label = "source_supported" if (ev_sids and rd.status != "inferred") else "inferred"
+
+        ensure_node(
+            node_id=src_id,
+            label=src_label,
+            category="component",
+            node_status="blocked" if rd.recordType == "blocker" else sup_label,
+            owner=rd.owner,
+            source_ids=ev_sids,
+            meta={"recordType": rd.recordType, "severity": rd.severity},
+        )
+        ensure_node(
+            node_id=tgt_id,
+            label=tgt_label,
+            category="team_or_external",
+            node_status=sup_label,
+            owner=rd.owner,
+            source_ids=ev_sids,
+            meta={"recordType": rd.recordType},
+        )
+
+        rel_type = (
+            "BLOCKS"
+            if rd.recordType == "blocker"
+            else "DEPENDS_ON"
+            if rd.recordType == "dependency"
+            else "REQUIRES_RUNBOOK"
+        )
+        add_edge(
+            src_node=src_id,
+            tgt_node=tgt_id,
+            relationship=rel_type,
+            support_status=sup_label,
+            severity=rd.severity,
+            ev_sources=ev_sids,
+            ev_claims=ev_cids,
+            explanation=rd.description,
+        )
+
+        # Link owner or explicit UNKNOWN OWNER GAP node for each risk/blocker/dependency
+        if rd.owner:
+            person_id = f"person-{rd.owner.lower().replace(' ', '-')}"
+            ensure_node(
+                node_id=person_id,
+                label=f"{rd.owner} (Assigned Owner)",
+                category="person",
+                node_status="source_supported",
+                owner=rd.owner,
+                source_ids=ev_sids,
+            )
+            add_edge(
+                src_node=src_id,
+                tgt_node=person_id,
+                relationship="OWNED_BY",
+                support_status=sup_label,
+                severity="low",
+                ev_sources=ev_sids,
+                ev_claims=ev_cids,
+                explanation=f"Explicitly assigned to {rd.owner} in source evidence.",
+            )
+        else:
+            gap_id = f"gap-unassigned-{rd.id[:8]}"
+            ensure_node(
+                node_id=gap_id,
+                label=f"UNKNOWN OWNER GAP ({src_label})",
+                category="unknown_owner_gap",
+                node_status="unknown_gap",
+                owner=None,
+                source_ids=ev_sids,
+                meta={"gapReason": "No assignee or long-term owner named in retrieved evidence."},
+            )
+            add_edge(
+                src_node=src_id,
+                tgt_node=gap_id,
+                relationship="UNASSIGNED_OWNER_GAP",
+                support_status=sup_label,
+                severity="high",
+                ev_sources=ev_sids,
+                ev_claims=ev_cids,
+                explanation="Owner is unassigned in source evidence; preserved as an explicit ownership gap.",
+            )
+
+    # 2. Add Task/Claim Nodes & Ownership / Conflict Edges
+    for clm in draft.claims:
+        ev_sids = [e.sourceId for e in clm.evidence]
+        sup_label = "source_supported" if (ev_sids and clm.status != "inferred") else "inferred"
+        task_node_id = f"task-{clm.claimId}"
+
+        ensure_node(
+            node_id=task_node_id,
+            label=f"[{clm.claimId.upper()}] {clm.type.replace('_', ' ').title()}",
+            category="task_or_decision",
+            node_status="blocked" if clm.taskStatus == "blocked" else sup_label,
+            owner=clm.owner,
+            source_ids=ev_sids,
+            meta={"claimText": clm.text, "claimStatus": clm.status},
+        )
+
+        if clm.owner:
+            person_id = f"person-{clm.owner.lower().replace(' ', '-')}"
+            ensure_node(
+                node_id=person_id,
+                label=f"{clm.owner} (Assigned Owner)",
+                category="person",
+                node_status="source_supported",
+                owner=clm.owner,
+                source_ids=ev_sids,
+            )
+            add_edge(
+                src_node=task_node_id,
+                tgt_node=person_id,
+                relationship="OWNED_BY",
+                support_status=sup_label,
+                severity="low",
+                ev_sources=ev_sids,
+                ev_claims=[clm.claimId],
+                explanation=f"Claim {clm.claimId} owner verified as {clm.owner}.",
+            )
+        else:
+            gap_id = f"gap-claim-{clm.claimId}"
+            ensure_node(
+                node_id=gap_id,
+                label=f"UNKNOWN OWNER GAP ({clm.claimId.upper()})",
+                category="unknown_owner_gap",
+                node_status="unknown_gap",
+                owner=None,
+                source_ids=ev_sids,
+                meta={"gapReason": f"Claim {clm.claimId} has no owner in source evidence."},
+            )
+            add_edge(
+                src_node=task_node_id,
+                tgt_node=gap_id,
+                relationship="UNASSIGNED_OWNER_GAP",
+                support_status=sup_label,
+                severity="high",
+                ev_sources=ev_sids,
+                ev_claims=[clm.claimId],
+                explanation=f"Claim {clm.claimId} has no owner in evidence; unknown owner shown as explicit gap.",
+            )
+
+    nodes_list = list(nodes_by_id.values())
+    unknown_gap_nodes = [n for n in nodes_list if n.category == "unknown_owner_gap"]
+    source_supported_edges = [e for e in edges if e.supportStatus == "source_supported"]
+    inferred_edges = [e for e in edges if e.supportStatus == "inferred"]
+
+    return DependencyMapResponse(
+        handoverId=draft.handoverId,
+        nodes=nodes_list,
+        edges=edges,
+        summary={
+            "totalNodes": len(nodes_list),
+            "totalEdges": len(edges),
+            "sourceSupportedEdgesCount": len(source_supported_edges),
+            "inferredEdgesCount": len(inferred_edges),
+            "unknownOwnerGapsCount": len(unknown_gap_nodes),
+            "unlabeledEdgesCount": 0,
+        },
+    )
+
+
+def compare_handover_versions(
+    db: Session,
+    handover_id_or_code: str,
+    user: User,
+    base_version: int = 1,
+    target_version: Optional[int] = None,
+) -> HandoverVersionDiffResponse:
+    """
+    Side-by-side comparison of two handover versions (e.g., v1 Initial AI Draft vs. v2 Approved Snapshot
+    or live reviewed draft), highlighting changed claims, statuses, rationale enrichments, and reviewer decisions.
+    """
+    handover = get_handover_by_id_or_code(db, handover_id_or_code)
+    membership = get_project_membership(db, handover.project_id, user)
+
+    saved_versions = (
+        db.query(HandoverVersion)
+        .filter(HandoverVersion.handover_id == handover.id)
+        .order_by(HandoverVersion.version_number.asc())
+        .all()
+    )
+
+    live_draft = format_handover_draft(
+        db,
+        handover,
+        allowed_classifications=membership.allowed_classifications,
+    ).model_dump(mode="json")
+
+    version_map: Dict[int, Dict[str, Any]] = {}
+    briefs: List[HandoverVersionBriefSchema] = []
+
+    for sv in saved_versions:
+        creator = db.query(User).filter(User.id == sv.created_by).first()
+        creator_email = creator.email if creator else sv.created_by
+        payload = sv.snapshot_payload or {}
+        version_map[sv.version_number] = {
+            "payload": payload,
+            "change_summary": sv.change_summary,
+            "created_by": creator_email,
+            "created_at": sv.created_at,
+        }
+        briefs.append(
+            HandoverVersionBriefSchema(
+                versionNumber=sv.version_number,
+                changeSummary=sv.change_summary,
+                createdBy=creator_email,
+                createdAt=sv.created_at,
+                claimsCount=len(payload.get("claims", [])),
+            )
+        )
+
+    if 1 not in version_map:
+        version_map[1] = {
+            "payload": live_draft,
+            "change_summary": "Initial 3-Agent AI Reconstruction Draft (v1)",
+            "created_by": "system@payflow.demo",
+            "created_at": handover.created_at,
+        }
+        briefs.insert(
+            0,
+            HandoverVersionBriefSchema(
+                versionNumber=1,
+                changeSummary="Initial 3-Agent AI Reconstruction Draft (v1)",
+                createdBy="system@payflow.demo",
+                createdAt=handover.created_at,
+                claimsCount=len(live_draft.get("claims", [])),
+            ),
+        )
+
+    # Always make the live current state selectable as the highest version (or live draft vN+1 if unapproved edits exist)
+    max_saved_ver = max(version_map.keys())
+    live_virtual_ver = max_saved_ver + 1 if max_saved_ver == 1 else max_saved_ver
+    if live_virtual_ver not in version_map:
+        version_map[live_virtual_ver] = {
+            "payload": live_draft,
+            "change_summary": f"Current Reviewed Workspace State (v{live_virtual_ver} Live)",
+            "created_by": user.email,
+            "created_at": handover.updated_at,
+        }
+        briefs.append(
+            HandoverVersionBriefSchema(
+                versionNumber=live_virtual_ver,
+                changeSummary=f"Current Reviewed Workspace State (v{live_virtual_ver} Live)",
+                createdBy=user.email,
+                createdAt=handover.updated_at,
+                claimsCount=len(live_draft.get("claims", [])),
+            )
+        )
+
+    resolved_base_ver = base_version if base_version in version_map else min(version_map.keys())
+    resolved_target_ver = (
+        target_version
+        if (target_version is not None and target_version in version_map)
+        else max(version_map.keys())
+    )
+
+    base_entry = version_map[resolved_base_ver]
+    target_entry = version_map[resolved_target_ver]
+
+    base_claims_by_code: Dict[str, Dict[str, Any]] = {
+        c.get("claimId", c.get("claim_code", "")): c
+        for c in base_entry["payload"].get("claims", [])
+    }
+    target_claims_by_code: Dict[str, Dict[str, Any]] = {
+        c.get("claimId", c.get("claim_code", "")): c
+        for c in target_entry["payload"].get("claims", [])
+    }
+
+    all_codes = sorted(set(base_claims_by_code.keys()).union(set(target_claims_by_code.keys())))
+
+    claim_diffs: List[ClaimVersionDiffSchema] = []
+    changed_claims_count = 0
+    status_changes_count = 0
+    review_decision_changes_count = 0
+    rationale_enriched_count = 0
+    owner_changes_count = 0
+    text_edits_count = 0
+
+    for code in all_codes:
+        if not code:
+            continue
+        b_clm = base_claims_by_code.get(code)
+        t_clm = target_claims_by_code.get(code)
+        change_types: List[str] = []
+
+        if b_clm and not t_clm:
+            change_types.append("REMOVED_OR_REVOKED")
+            changed_claims_count += 1
+        elif t_clm and not b_clm:
+            change_types.append("ADDED")
+            changed_claims_count += 1
+        elif b_clm and t_clm:
+            if b_clm.get("status") != t_clm.get("status"):
+                change_types.append("STATUS_CHANGED")
+                status_changes_count += 1
+            if b_clm.get("reviewState") != t_clm.get("reviewState"):
+                change_types.append("REVIEW_DECISION_CHANGED")
+                review_decision_changes_count += 1
+            if (b_clm.get("text") or "").strip() != (t_clm.get("text") or "").strip():
+                change_types.append("TEXT_EDITED")
+                text_edits_count += 1
+            if (b_clm.get("rationale") or "").strip() != (t_clm.get("rationale") or "").strip():
+                change_types.append("RATIONALE_ENRICHED")
+                rationale_enriched_count += 1
+            if (b_clm.get("owner") or None) != (t_clm.get("owner") or None):
+                change_types.append("OWNER_UPDATED")
+                owner_changes_count += 1
+            if t_clm.get("reviewerFlaggedMismatch") and not b_clm.get("reviewerFlaggedMismatch"):
+                change_types.append("CITATION_MISMATCH_FLAGGED")
+
+            if change_types:
+                changed_claims_count += 1
+            else:
+                change_types.append("UNCHANGED")
+
+        active_ref = t_clm or b_clm or {}
+        ev_ids = [
+            e.get("sourceId", "")
+            for e in active_ref.get("evidence", [])
+            if e.get("sourceId")
+        ]
+
+        claim_diffs.append(
+            ClaimVersionDiffSchema(
+                claimCode=code,
+                claimType=active_ref.get("type", "technical_context"),
+                changeTypes=change_types,
+                beforeText=b_clm.get("text") if b_clm else None,
+                afterText=t_clm.get("text") if t_clm else None,
+                beforeRationale=b_clm.get("rationale") if b_clm else None,
+                afterRationale=t_clm.get("rationale") if t_clm else None,
+                beforeStatus=b_clm.get("status") if b_clm else None,
+                afterStatus=t_clm.get("status") if t_clm else None,
+                beforeReviewState=b_clm.get("reviewState") if b_clm else None,
+                afterReviewState=t_clm.get("reviewState") if t_clm else None,
+                beforeOwner=b_clm.get("owner") if b_clm else None,
+                afterOwner=t_clm.get("owner") if t_clm else None,
+                reviewerNotes=t_clm.get("reviewerNotes") if t_clm else None,
+                evidenceSourceIds=ev_ids,
+            )
+        )
+
+    return HandoverVersionDiffResponse(
+        handoverId=handover.handover_code,
+        baseVersion=resolved_base_ver,
+        targetVersion=resolved_target_ver,
+        baseChangeSummary=base_entry["change_summary"],
+        targetChangeSummary=target_entry["change_summary"],
+        availableVersions=briefs,
+        summaryMetrics={
+            "totalClaimsCompared": len(claim_diffs),
+            "changedClaimsCount": changed_claims_count,
+            "statusChangesCount": status_changes_count,
+            "reviewDecisionChangesCount": review_decision_changes_count,
+            "rationaleEnrichedCount": rationale_enriched_count,
+            "ownerChangesCount": owner_changes_count,
+            "textEditsCount": text_edits_count,
+        },
+        claimDiffs=claim_diffs,
+    )

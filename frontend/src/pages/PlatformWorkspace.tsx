@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { EvidenceInspectorModal } from "../components/EvidenceInspectorModal";
 import { EvidenceStatusBadge } from "../components/EvidenceStatusBadge";
+import { Round3ImprovementsPanel } from "../components/Round3ImprovementsPanel";
 import { useAuth } from "../hooks/useAuth";
 import { apiClient } from "../lib/apiClient";
 import {
@@ -8,6 +9,7 @@ import {
   AuditLogItem,
   ClaimItem,
   EvidenceStatus,
+  GitHubImportResponse,
   HandoverDraft,
   ProjectRole,
   SourceDocumentItem,
@@ -246,6 +248,14 @@ export const PlatformWorkspace: React.FC = () => {
 
   // Evidence Inspector Modal
   const [inspectedClaim, setInspectedClaim] = useState<ClaimItem | null>(null);
+
+  // Round 3 Improvement 1: Live GitHub Repository Connector state
+  const [githubRepoName, setGithubRepoName] = useState<string>("Ankit592006/Knowledge-handover");
+  const [githubIncludeIssues, setGithubIncludeIssues] = useState<boolean>(true);
+  const [githubIncludePulls, setGithubIncludePulls] = useState<boolean>(true);
+  const [githubDocPaths, setGithubDocPaths] = useState<string>("README.md, docs/DECISIONS.md");
+  const [githubAccessLevel, setGithubAccessLevel] = useState<AccessClassification>("INTERNAL");
+  const [githubPlantSecret, setGithubPlantSecret] = useState<boolean>(true);
 
   const formatApiError = (err: any, fallback: string): string => {
     const detail = err?.response?.data?.detail;
@@ -613,6 +623,126 @@ export const PlatformWorkspace: React.FC = () => {
       );
     } catch (err: any) {
       setErrorMsg(formatApiError(err, "Source upload failed."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportGitHubSources = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const projectId = draft?.projectId || payflowProjectId;
+    if (!projectId) return;
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      const docPathsList = githubDocPaths
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const resp = await apiClient.post<GitHubImportResponse>(
+        `/api/v1/projects/${projectId}/sources/github-import`,
+        {
+          repo_full_name: githubRepoName,
+          include_issues: githubIncludeIssues,
+          include_pulls: githubIncludePulls,
+          doc_paths: docPathsList,
+          access_level: githubAccessLevel,
+          plant_test_secret_for_verification: githubPlantSecret,
+          max_items_per_category: 3,
+        }
+      );
+      const srcResp = await apiClient.get<SourceDocumentItem[]>(
+        `/api/v1/projects/${projectId}/sources`
+      );
+      setSources(srcResp.data);
+      setStatusBanner(
+        `GitHub Connector (${resp.data.connector_mode}) imported ${resp.data.imported_count} artifact(s) from '${resp.data.repo_full_name}' with classification [${githubAccessLevel}] and redacted ${resp.data.total_redacted_secrets_count} secret(s) prior to storage.`
+      );
+    } catch (err: any) {
+      setErrorMsg(formatApiError(err, "GitHub repository import failed."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleSourceRevocation = async (
+    source: SourceDocumentItem,
+    revokeAccess: boolean
+  ) => {
+    const projectId = draft?.projectId || payflowProjectId || source.project_id;
+    if (!projectId) return;
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      await apiClient.patch(
+        `/api/v1/projects/${projectId}/sources/${source.stable_source_id}/access`,
+        {
+          access_revoked: revokeAccess,
+          revocation_reason: revokeAccess
+            ? "Repository access permission revoked at retrieval time."
+            : "Repository access permission restored by Project Lead.",
+        }
+      );
+      const srcResp = await apiClient.get<SourceDocumentItem[]>(
+        `/api/v1/projects/${projectId}/sources`
+      );
+      setSources(srcResp.data);
+      if (draft) {
+        const refreshedDraft = await apiClient.get<HandoverDraft>(
+          `/api/handovers/${draft.handoverId}/draft`
+        );
+        setDraft(refreshedDraft.data);
+      }
+      if (continuationPlan) {
+        const refreshedPlan = await apiClient.get<SuccessorContinuationPlan>(
+          `/api/handovers/${continuationPlan.handoverId}/successor-view`
+        );
+        setContinuationPlan(refreshedPlan.data);
+      }
+      setStatusBanner(
+        revokeAccess
+          ? `Access REVOKED for '${source.stable_source_id}'. Retrieval-time permission checks immediately remove its content from RAG retrieval, draft claims, and the Successor View.`
+          : `Access RESTORED for '${source.stable_source_id}'. Source is once again available for retrieval and sharing.`
+      );
+    } catch (err: any) {
+      setErrorMsg(formatApiError(err, "Failed to update source access permission."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleFlagCitationMismatch = async (
+    claimUuid: string,
+    flagMismatch: boolean
+  ) => {
+    if (!draft) return;
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      const resp = await apiClient.patch<ClaimItem>(
+        `/api/claims/${claimUuid}?handover_id=${draft.handoverId}`,
+        {
+          flag_citation_mismatch: flagMismatch,
+          citation_support_override: flagMismatch ? "mismatch" : "supported",
+          reviewer_notes: flagMismatch
+            ? `Citation mismatch flagged by ${user?.email || effectiveRole} and fed back to L6.2 evaluation telemetry.`
+            : `Citation support confirmed by ${user?.email || effectiveRole}.`,
+        }
+      );
+      setDraft({
+        ...draft,
+        claims: draft.claims.map((c) => (c.id === claimUuid ? resp.data : c)),
+      });
+      if (inspectedClaim && inspectedClaim.id === claimUuid) {
+        setInspectedClaim(resp.data);
+      }
+      setStatusBanner(
+        flagMismatch
+          ? `Reviewer flagged citation mismatch on ${resp.data.claimId} — recorded in uncertainty flags and fed back to L6.2 pipeline telemetry.`
+          : `Cleared citation mismatch flag on ${resp.data.claimId}.`
+      );
+    } catch (err: any) {
+      setErrorMsg(formatApiError(err, "Failed to update citation mismatch flag."));
     } finally {
       setLoading(false);
     }
@@ -2180,76 +2310,101 @@ export const PlatformWorkspace: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Round 3 Capabilities Hub on Dashboard */}
+                  <Round3ImprovementsPanel
+                    handoverId={draft.handoverId}
+                    currentVersion={draft.currentVersion}
+                    handoverStatus={draft.status}
+                    defaultSubTab="dependency_map"
+                  />
                 </>
               )
             )}
           </div>
         )}
 
-        {/* TAB 3: SOURCES & SECRET REDACTION */}
+        {/* TAB 3: SOURCES & SECRET REDACTION + ROUND 3 LIVE GITHUB CONNECTOR */}
         {activeTab === "sources" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {/* Role-Gated Upload Panel: Only visible to PROJECT_LEAD and OUTGOING_DEV */}
+              {/* Role-Gated Upload & Live GitHub Connector Panels: Only visible to PROJECT_LEAD and OUTGOING_DEV */}
               {canUploadSource ? (
-                <form
-                  onSubmit={handleUploadSource}
-                  className="kh-surface-elevated p-5 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white">
-                      Ingest & Redact New Source
-                    </h3>
-                    <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
-                      {effectiveRole}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">
-                    Raw tokens, API keys, and private keys are automatically scrubbed prior to
-                    chunking and vector indexing.
-                  </p>
-                  <div>
-                    <label className="block text-xs text-zinc-300">Stable Source ID</label>
-                    <input
-                      type="text"
-                      value={newSourceId}
-                      onChange={(e) => setNewSourceId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-mono"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-zinc-300">Title</label>
-                    <input
-                      type="text"
-                      value={newSourceTitle}
-                      onChange={(e) => setNewSourceTitle(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-5">
+                  {/* Round 3 Improvement 1: Live GitHub Connector */}
+                  <form
+                    onSubmit={handleImportGitHubSources}
+                    className="kh-surface-elevated p-5 space-y-3 border-emerald-500/40"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-300">
+                          Round 3 Improvement 1 · Live Connector
+                        </span>
+                        <h3 className="text-sm font-bold text-white">
+                          Read-Only GitHub Repository Connector
+                        </h3>
+                      </div>
+                      <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                        REST v3
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Imports issues, pull requests, and selected Markdown docs into the source
+                      model with classification tagging, pre-storage secret redaction, and
+                      retrieval-time permission checks.
+                    </p>
                     <div>
-                      <label className="block text-xs text-zinc-300">Source Type</label>
-                      <select
-                        value={newSourceType}
-                        onChange={(e) => setNewSourceType(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-2 py-1.5 text-xs text-white"
-                      >
-                        <option value="technical_doc">technical_doc</option>
-                        <option value="meeting_note">meeting_note</option>
-                        <option value="adr">adr</option>
-                        <option value="pull_request">pull_request</option>
-                        <option value="synthetic_issue">synthetic_issue</option>
-                        <option value="uploaded_file">uploaded_file</option>
-                      </select>
+                      <label className="block text-xs text-zinc-300">
+                        GitHub Repository (owner/repo)
+                      </label>
+                      <input
+                        type="text"
+                        aria-label="GitHub Repository"
+                        value={githubRepoName}
+                        onChange={(e) => setGithubRepoName(e.target.value)}
+                        placeholder="Ankit592006/Knowledge-handover"
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-mono"
+                        required
+                      />
                     </div>
                     <div>
-                      <label className="block text-xs text-zinc-300">Classification</label>
+                      <label className="block text-xs text-zinc-300">
+                        Selected Repository Documents (comma-separated paths)
+                      </label>
+                      <input
+                        type="text"
+                        value={githubDocPaths}
+                        onChange={(e) => setGithubDocPaths(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-mono"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <label className="flex items-center gap-2 rounded border border-zinc-800 bg-neutral-950 px-2.5 py-1.5 text-zinc-200">
+                        <input
+                          type="checkbox"
+                          checked={githubIncludeIssues}
+                          onChange={(e) => setGithubIncludeIssues(e.target.checked)}
+                        />
+                        <span>Import Issues</span>
+                      </label>
+                      <label className="flex items-center gap-2 rounded border border-zinc-800 bg-neutral-950 px-2.5 py-1.5 text-zinc-200">
+                        <input
+                          type="checkbox"
+                          checked={githubIncludePulls}
+                          onChange={(e) => setGithubIncludePulls(e.target.checked)}
+                        />
+                        <span>Import PRs</span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-zinc-300">
+                        Classification on Import
+                      </label>
                       <select
-                        value={newSourceAccess}
+                        value={githubAccessLevel}
                         onChange={(e) =>
-                          setNewSourceAccess(e.target.value as AccessClassification)
+                          setGithubAccessLevel(e.target.value as AccessClassification)
                         }
                         className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-2 py-1.5 text-xs text-white"
                       >
@@ -2260,27 +2415,118 @@ export const PlatformWorkspace: React.FC = () => {
                         )}
                       </select>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-zinc-300">
-                      Raw Content (Secrets will be replaced with [REDACTED_SECRET])
+                    <label className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-2.5 text-[11px] text-amber-200">
+                      <input
+                        type="checkbox"
+                        checked={githubPlantSecret}
+                        onChange={(e) => setGithubPlantSecret(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Plant synthetic PAT &amp; Stripe key during import to verify pre-storage
+                        secret redaction
+                      </span>
                     </label>
-                    <textarea
-                      rows={4}
-                      value={newSourceContent}
-                      onChange={(e) => setNewSourceContent(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 p-2.5 text-xs text-white font-mono"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-bold text-neutral-950 hover:bg-emerald-400 disabled:opacity-40"
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-bold text-neutral-950 hover:bg-emerald-400 disabled:opacity-40"
+                    >
+                      Import from GitHub &amp; Redact Secrets
+                    </button>
+                  </form>
+
+                  {/* Custom Manual Artifact Upload Form */}
+                  <form
+                    onSubmit={handleUploadSource}
+                    className="kh-surface-elevated p-5 space-y-3"
                   >
-                    Upload, Redact Secrets & Index Chunks
-                  </button>
-                </form>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-white">
+                        Ingest & Redact New Source
+                      </h3>
+                      <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                        {effectiveRole}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Raw tokens, API keys, and private keys are automatically scrubbed prior to
+                      chunking and vector indexing.
+                    </p>
+                    <div>
+                      <label className="block text-xs text-zinc-300">Stable Source ID</label>
+                      <input
+                        type="text"
+                        value={newSourceId}
+                        onChange={(e) => setNewSourceId(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-zinc-300">Title</label>
+                      <input
+                        type="text"
+                        value={newSourceTitle}
+                        onChange={(e) => setNewSourceTitle(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-3 py-1.5 text-xs text-white"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-zinc-300">Source Type</label>
+                        <select
+                          value={newSourceType}
+                          onChange={(e) => setNewSourceType(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-2 py-1.5 text-xs text-white"
+                        >
+                          <option value="technical_doc">technical_doc</option>
+                          <option value="meeting_note">meeting_note</option>
+                          <option value="adr">adr</option>
+                          <option value="pull_request">pull_request</option>
+                          <option value="synthetic_issue">synthetic_issue</option>
+                          <option value="uploaded_file">uploaded_file</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-300">Classification</label>
+                        <select
+                          value={newSourceAccess}
+                          onChange={(e) =>
+                            setNewSourceAccess(e.target.value as AccessClassification)
+                          }
+                          className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 px-2 py-1.5 text-xs text-white"
+                        >
+                          <option value="PUBLIC">PUBLIC</option>
+                          <option value="INTERNAL">INTERNAL</option>
+                          {allowedClassifications.includes("RESTRICTED") && (
+                            <option value="RESTRICTED">RESTRICTED</option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-zinc-300">
+                        Raw Content (Secrets will be replaced with [REDACTED_SECRET])
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={newSourceContent}
+                        onChange={(e) => setNewSourceContent(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-neutral-950 p-2.5 text-xs text-white font-mono"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-bold text-neutral-950 hover:bg-emerald-400 disabled:opacity-40"
+                    >
+                      Upload, Redact Secrets & Index Chunks
+                    </button>
+                  </form>
+                </div>
               ) : (
                 <div className="kh-surface p-5 space-y-3">
                   <span className="rounded border border-zinc-700 bg-neutral-950 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
@@ -2300,15 +2546,15 @@ export const PlatformWorkspace: React.FC = () => {
                       <strong>OUTGOING_DEV</strong>.
                     </div>
                     <div>
-                      • Any <code className="text-rose-300">RESTRICTED</code> vendor notes are
-                      filtered out at the SQL query layer unless your membership includes{" "}
-                      <code className="text-rose-300">RESTRICTED</code> clearance.
+                      • Any <code className="text-rose-300">RESTRICTED</code> or{" "}
+                      <code className="text-rose-300">REVOKED</code> records are filtered out at
+                      retrieval and sharing time.
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Source List */}
+              {/* Source List with Retrieval-Time Access Revocation Controls */}
               <div className="lg:col-span-2 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold text-white">
@@ -2320,37 +2566,70 @@ export const PlatformWorkspace: React.FC = () => {
                     ]
                   </span>
                 </div>
-                {sources.map((src) => (
-                  <div key={src.id} className="kh-surface p-4 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300">
-                          {src.stable_source_id}
-                        </span>
-                        <span className="text-sm font-semibold text-white">{src.title}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span
-                          className={`rounded px-2 py-0.5 font-mono font-semibold ${
-                            src.access_level === "RESTRICTED"
-                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                              : "bg-zinc-800 text-zinc-300"
-                          }`}
-                        >
-                          {src.access_level}
-                        </span>
-                        {src.redacted_secrets_count > 0 && (
-                          <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-amber-300 border border-amber-500/30">
-                            {src.redacted_secrets_count} Secret(s) Redacted
+                {sources.map((src) => {
+                  const isRevoked = Boolean(src.metadata_json?.access_revoked);
+                  const ghRepo = src.metadata_json?.github_repo;
+                  return (
+                    <div
+                      key={src.id}
+                      className={`kh-surface p-4 space-y-2 ${
+                        isRevoked ? "border-rose-500/50 opacity-80" : ""
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300">
+                            {src.stable_source_id}
                           </span>
-                        )}
+                          <span className="text-sm font-semibold text-white">{src.title}</span>
+                          {ghRepo && (
+                            <span className="rounded border border-teal-500/30 bg-teal-950/30 px-2 py-0.5 font-mono text-[10px] text-teal-300">
+                              GitHub: {ghRepo} ({src.version_tag})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {isRevoked && (
+                            <span className="rounded bg-rose-500/25 border border-rose-500/50 px-2 py-0.5 font-mono text-[10px] font-bold text-rose-300">
+                              REVOKED AT RETRIEVAL
+                            </span>
+                          )}
+                          <span
+                            className={`rounded px-2 py-0.5 font-mono font-semibold ${
+                              src.access_level === "RESTRICTED"
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                : "bg-zinc-800 text-zinc-300"
+                            }`}
+                          >
+                            {src.access_level}
+                          </span>
+                          {src.redacted_secrets_count > 0 && (
+                            <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-amber-300 border border-amber-500/30">
+                              {src.redacted_secrets_count} Secret(s) Redacted
+                            </span>
+                          )}
+                          {isAuthenticated && effectiveRole === "PROJECT_LEAD" && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSourceRevocation(src, !isRevoked)}
+                              disabled={loading}
+                              className={`rounded border px-2.5 py-0.5 font-mono text-[10px] font-bold transition ${
+                                isRevoked
+                                  ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                                  : "border-rose-500/40 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50"
+                              }`}
+                            >
+                              {isRevoked ? "Restore Access" : "Revoke Access"}
+                            </button>
+                          )}
+                        </div>
                       </div>
+                      <pre className="whitespace-pre-wrap rounded-lg border border-zinc-800/90 bg-neutral-950 p-3 font-mono text-xs text-zinc-300">
+                        {src.content_redacted}
+                      </pre>
                     </div>
-                    <pre className="whitespace-pre-wrap rounded-lg border border-zinc-800/90 bg-neutral-950 p-3 font-mono text-xs text-zinc-300">
-                      {src.content_redacted}
-                    </pre>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -2505,6 +2784,20 @@ export const PlatformWorkspace: React.FC = () => {
                         status={claim.status}
                         isAiGenerated={claim.isAiGenerated}
                       />
+                      <span
+                        className={`rounded border px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${
+                          claim.citationSupportStatus === "mismatch" || claim.reviewerFlaggedMismatch
+                            ? "border-rose-500/50 bg-rose-950/50 text-rose-300"
+                            : claim.citationSupportStatus === "weak"
+                            ? "border-amber-500/40 bg-amber-950/40 text-amber-300"
+                            : "border-teal-500/30 bg-teal-950/30 text-teal-300"
+                        }`}
+                      >
+                        L6.2 {claim.citationSupportStatus || "supported"}
+                        {claim.citationSupportScore !== undefined
+                          ? ` (${Math.round(claim.citationSupportScore * 100)}%)`
+                          : ""}
+                      </span>
                       <span className="rounded border border-zinc-700 bg-neutral-950 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
                         Review State: {claim.reviewState}
                       </span>
@@ -2599,6 +2892,14 @@ export const PlatformWorkspace: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Round 3 Capabilities Hub in Review Workspace */}
+            <Round3ImprovementsPanel
+              handoverId={draft.handoverId}
+              currentVersion={draft.currentVersion}
+              handoverStatus={draft.status}
+              defaultSubTab="version_diff"
+            />
           </div>
         )}
 
@@ -2721,6 +3022,14 @@ export const PlatformWorkspace: React.FC = () => {
                         <strong className="text-emerald-300">
                           {continuationPlan.restrictedSourcesFilteredOut}
                         </strong>{" "}
+                        {continuationPlan.revokedSourcesFilteredOut !== undefined && (
+                          <>
+                            · Revoked Sources Filtered Out:{" "}
+                            <strong className="text-rose-300">
+                              {continuationPlan.revokedSourcesFilteredOut}
+                            </strong>{" "}
+                          </>
+                        )}
                         · Approved By:{" "}
                         <strong className="text-zinc-200">
                           {continuationPlan.approval.reviewer || "Reviewer"}
@@ -2888,6 +3197,14 @@ export const PlatformWorkspace: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Round 3 Interactive Dependency Map & Version Diff for Successor */}
+                <Round3ImprovementsPanel
+                  handoverId={continuationPlan.handoverId}
+                  currentVersion={continuationPlan.version}
+                  handoverStatus={continuationPlan.approval.status}
+                  defaultSubTab="dependency_map"
+                />
+
                 {/* All 13 Structured Sections (Readable Cards, Task Lists, Responsibilities, Risks & Dependencies) */}
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2979,10 +3296,16 @@ export const PlatformWorkspace: React.FC = () => {
         isOpen={Boolean(inspectedClaim)}
         onClose={() => setInspectedClaim(null)}
         claimId={inspectedClaim?.claimId || ""}
+        claimUuid={inspectedClaim?.id}
         claimText={inspectedClaim?.text || ""}
         evidence={inspectedClaim?.evidence || []}
         conflicts={inspectedClaim?.conflicts || []}
         sources={sources}
+        citationSupportStatus={inspectedClaim?.citationSupportStatus}
+        citationSupportScore={inspectedClaim?.citationSupportScore}
+        reviewerFlaggedMismatch={inspectedClaim?.reviewerFlaggedMismatch}
+        canFlagMismatch={canVerifyClaims || canEditOrFlagClaims}
+        onToggleFlagMismatch={handleToggleFlagCitationMismatch}
       />
     </div>
   );

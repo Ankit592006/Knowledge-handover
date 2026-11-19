@@ -282,6 +282,10 @@ def upload_custom_source(
     return format_source_document(doc, include_chunks=True)
 
 
+def is_source_revoked(doc: SourceDocument) -> bool:
+    return bool((doc.metadata_json or {}).get("access_revoked", False))
+
+
 def list_project_sources_for_user(
     db: Session,
     project_id: str,
@@ -297,6 +301,9 @@ def list_project_sources_for_user(
         .order_by(SourceDocument.source_updated_at.desc())
         .all()
     )
+    # Retrieval-time revocation check: hide revoked sources from non-Project-Lead roles
+    if membership.project_role != ProjectRole.PROJECT_LEAD.value:
+        docs = [d for d in docs if not is_source_revoked(d)]
     return [format_source_document(d, include_chunks=False) for d in docs]
 
 
@@ -317,6 +324,22 @@ def get_source_detail_for_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source document not found.")
 
     membership = get_project_membership(db, doc.project_id, user)
+    if is_source_revoked(doc) and membership.project_role != ProjectRole.PROJECT_LEAD.value:
+        record_audit_event(
+            db=db,
+            action="REVOKED_SOURCE_ACCESS_BLOCKED",
+            target_type="source_document",
+            target_id=doc.stable_source_id,
+            actor=user,
+            project_id=doc.project_id,
+            new_state={"access_revoked": True},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Access to this source document has been revoked.",
+        )
+
     if doc.access_level not in membership.allowed_classifications:
         record_audit_event(
             db=db,
@@ -345,7 +368,7 @@ def retrieve_scoped_chunks(
     top_k: int = 12,
     source_types: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Permission-filtered semantic retrieval (Module 7). Enforces access scope BEFORE retrieval."""
+    """Permission-filtered semantic retrieval (Module 7). Enforces access scope and revocation BEFORE retrieval."""
     if not allowed_classifications:
         return []
 
@@ -371,11 +394,13 @@ def retrieve_scoped_chunks(
         pg_rows = (
             base_query.add_columns(distance_expr)
             .order_by(distance_expr.asc(), DocumentChunk.chunk_index.asc())
-            .limit(top_k)
+            .limit(top_k * 2)
             .all()
         )
         pg_results: List[Dict[str, Any]] = []
         for chunk, doc, dist in pg_rows:
+            if is_source_revoked(doc):
+                continue
             sim = 1.0 - float(dist) if dist is not None else 0.0
             pg_results.append(
                 {
@@ -396,6 +421,8 @@ def retrieve_scoped_chunks(
                     "similarity": round(sim, 4),
                 }
             )
+            if len(pg_results) >= top_k:
+                break
         return pg_results
 
     rows = base_query.all()
@@ -404,6 +431,8 @@ def retrieve_scoped_chunks(
 
     scored: List[Dict[str, Any]] = []
     for chunk, doc in rows:
+        if is_source_revoked(doc):
+            continue
         emb = list(chunk.embedding) if chunk.embedding is not None else []
         sim = cosine_similarity(query_vec, emb)
         scored.append(

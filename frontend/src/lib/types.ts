@@ -44,6 +44,8 @@ export interface UserProfile {
   memberships: ProjectMembershipBrief[];
 }
 
+export type CitationSupportLabel = "supported" | "weak" | "mismatch";
+
 export interface EvidenceReference {
   sourceId: string;
   sourceType: string;
@@ -54,6 +56,9 @@ export interface EvidenceReference {
   versionTag: string;
   sourceUpdatedAt: string;
   deterministicVerified: boolean;
+  supportStatus?: CitationSupportLabel;
+  supportScore?: number;
+  supportExplanation?: string;
 }
 
 export interface ConflictPair {
@@ -86,6 +91,9 @@ export interface HandoverClaim {
   reviewerNotes?: string | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
+  citationSupportStatus?: CitationSupportLabel;
+  citationSupportScore?: number;
+  reviewerFlaggedMismatch?: boolean;
 }
 
 export interface RiskOrDependencyItem {
@@ -143,6 +151,7 @@ export interface SourceDocumentItem {
   access_level: string;
   version_tag: string;
   author_handle?: string | null;
+  metadata_json?: Record<string, any>;
   redacted_secrets_count: number;
   source_updated_at: string;
   chunk_count: number;
@@ -177,6 +186,7 @@ export interface SuccessorContinuationPlan {
   version: number;
   accessScopeApplied: string[];
   restrictedSourcesFilteredOut: number;
+  revokedSourcesFilteredOut?: number;
   sections: Record<string, unknown>;
   claims: HandoverClaim[];
   risksAndDependencies: RiskOrDependencyItem[];
@@ -198,4 +208,131 @@ export interface AuditLogItem {
   previous_state?: Record<string, unknown> | null;
   new_state?: Record<string, unknown> | null;
   created_at: string;
+}
+
+// Round 3 Improvement 1: Live GitHub Connector
+export interface GitHubImportResponse {
+  repo_full_name: string;
+  live_github_fetched: boolean;
+  connector_mode: string;
+  imported_count: number;
+  total_redacted_secrets_count: number;
+  sources: SourceDocumentItem[];
+}
+
+// Round 3 Improvement 2: Citation-Support Evaluation Harness
+export interface EvaluationMetricsBlock {
+  mode: string;
+  evidenceCoverageRate: number;
+  citationMismatchDetectionRate: number;
+  unflaggedMismatchCount: number;
+  extractionPrecision: number;
+  extractionRecall: number;
+  extractionF1: number;
+  conflictRecall: number;
+  avgReviewTimeSecondsPerHandover: number;
+}
+
+export interface EvaluationHarnessResponse {
+  benchmarkName: string;
+  evaluatedAt: string;
+  groundTruthSummary: Record<string, number>;
+  baselineMetrics: EvaluationMetricsBlock;
+  postImprovementMetrics: EvaluationMetricsBlock;
+  deltaImprovements: Record<string, string | number>;
+  caseByCaseResults: Array<{
+    caseId: string;
+    claimCode: string;
+    category: string;
+    citedSourceId: string;
+    claimText: string;
+    expectedSupportLabel: CitationSupportLabel;
+    baselineL6_1Verdict: string;
+    postImprovementL6_2Verdict: CitationSupportLabel;
+    supportScore: number;
+    labelMatchedGroundTruth: boolean;
+    explanation: string;
+  }>;
+}
+
+// Round 3 Improvement 3: Evidence-Backed Dependency Map & Version Comparison
+export interface DependencyGraphNode {
+  nodeId: string;
+  label: string;
+  category: "component" | "team_or_external" | "task_or_decision" | "person" | "unknown_owner_gap";
+  status: string;
+  owner?: string | null;
+  evidenceSourceIds: string[];
+  metadata: Record<string, any>;
+}
+
+export interface DependencyGraphEdge {
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  relationship: string;
+  supportStatus: "source_supported" | "inferred";
+  severity: string;
+  evidenceSourceIds: string[];
+  evidenceClaimIds: string[];
+  explanation: string;
+}
+
+export interface DependencyMapResponse {
+  handoverId: string;
+  nodes: DependencyGraphNode[];
+  edges: DependencyGraphEdge[];
+  summary: {
+    totalNodes: number;
+    totalEdges: number;
+    sourceSupportedEdgesCount: number;
+    inferredEdgesCount: number;
+    unknownOwnerGapsCount: number;
+    unlabeledEdgesCount: number;
+  };
+}
+
+export interface HandoverVersionBrief {
+  versionNumber: number;
+  changeSummary: string;
+  createdBy: string;
+  createdAt: string;
+  claimsCount: number;
+}
+
+export interface ClaimVersionDiff {
+  claimCode: string;
+  claimType: string;
+  changeTypes: string[];
+  beforeText?: string | null;
+  afterText?: string | null;
+  beforeRationale?: string | null;
+  afterRationale?: string | null;
+  beforeStatus?: string | null;
+  afterStatus?: string | null;
+  beforeReviewState?: string | null;
+  afterReviewState?: string | null;
+  beforeOwner?: string | null;
+  afterOwner?: string | null;
+  reviewerNotes?: string | null;
+  evidenceSourceIds: string[];
+}
+
+export interface HandoverVersionDiffResponse {
+  handoverId: string;
+  baseVersion: number;
+  targetVersion: number;
+  baseChangeSummary: string;
+  targetChangeSummary: string;
+  availableVersions: HandoverVersionBrief[];
+  summaryMetrics: {
+    totalClaimsCompared: number;
+    changedClaimsCount: number;
+    statusChangesCount: number;
+    reviewDecisionChangesCount: number;
+    rationaleEnrichedCount: number;
+    ownerChangesCount: number;
+    textEditsCount: number;
+  };
+  claimDiffs: ClaimVersionDiff[];
 }

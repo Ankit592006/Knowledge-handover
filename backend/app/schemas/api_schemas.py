@@ -224,6 +224,9 @@ class EvidenceReferenceSchema(BaseModel):
     versionTag: str = "v1"
     sourceUpdatedAt: datetime
     deterministicVerified: bool = True
+    supportStatus: str = "supported"  # supported | weak | mismatch
+    supportScore: float = 0.88
+    supportExplanation: str = "Excerpt substantiates claim entities and assertion."
 
 
 class ConflictPairSchema(BaseModel):
@@ -256,6 +259,9 @@ class ClaimOutputSchema(BaseModel):
     reviewerNotes: Optional[str] = None
     reviewedBy: Optional[str] = None
     reviewedAt: Optional[datetime] = None
+    citationSupportStatus: str = "supported"  # supported | weak | mismatch
+    citationSupportScore: float = 0.88
+    reviewerFlaggedMismatch: bool = False
 
 
 class RiskDependencyOutputSchema(BaseModel):
@@ -332,6 +338,8 @@ class ClaimPatchRequest(BaseModel):
     status: Optional[EvidenceStatus] = None
     review_state: Optional[ClaimReviewState] = None
     reviewer_notes: Optional[str] = None
+    flag_citation_mismatch: Optional[bool] = None
+    citation_support_override: Optional[str] = None  # supported | weak | mismatch
 
 
 class ClarificationAnswerRequest(BaseModel):
@@ -354,6 +362,7 @@ class SuccessorContinuationPlanResponse(BaseModel):
     version: int
     accessScopeApplied: List[str]
     restrictedSourcesFilteredOut: int
+    revokedSourcesFilteredOut: int = 0
     sections: Dict[str, Any]
     claims: List[ClaimOutputSchema]
     risksAndDependencies: List[RiskDependencyOutputSchema]
@@ -377,3 +386,133 @@ class AuditLogResponse(BaseModel):
     previous_state: Optional[Dict[str, Any]] = None
     new_state: Optional[Dict[str, Any]] = None
     created_at: datetime
+
+
+# -----------------------------------------------------------------------------
+# 6. Round 3 Improvement 1: Live GitHub Connector & Retrieval Permission Checks
+# -----------------------------------------------------------------------------
+class GitHubImportRequest(BaseModel):
+    repo_full_name: str = Field(
+        default="Ankit592006/Knowledge-handover",
+        min_length=3,
+        max_length=255,
+        description="GitHub repository in 'owner/repo' format",
+    )
+    include_issues: bool = True
+    include_pulls: bool = True
+    doc_paths: List[str] = Field(
+        default_factory=lambda: ["README.md", "docs/DECISIONS.md"]
+    )
+    access_level: AccessClassification = AccessClassification.INTERNAL
+    github_token: Optional[str] = None
+    plant_test_secret_for_verification: bool = False
+    max_items_per_category: int = Field(default=3, ge=1, le=10)
+
+
+class GitHubImportResponse(BaseModel):
+    repo_full_name: str
+    live_github_fetched: bool
+    connector_mode: str
+    imported_count: int
+    total_redacted_secrets_count: int
+    sources: List[SourceDocumentResponse]
+
+
+class SourceAccessUpdateRequest(BaseModel):
+    access_revoked: Optional[bool] = None
+    access_level: Optional[AccessClassification] = None
+    revocation_reason: str = "Repository permission revoked or elevated at retrieval time."
+
+
+# -----------------------------------------------------------------------------
+# 7. Round 3 Improvement 2: Citation-Support Verification & Evaluation Harness
+# -----------------------------------------------------------------------------
+class EvaluationMetricsBlock(BaseModel):
+    mode: str
+    evidenceCoverageRate: float
+    citationMismatchDetectionRate: float
+    unflaggedMismatchCount: int
+    extractionPrecision: float
+    extractionRecall: float
+    extractionF1: float
+    conflictRecall: float
+    avgReviewTimeSecondsPerHandover: float
+
+
+class EvaluationHarnessResponse(BaseModel):
+    benchmarkName: str
+    evaluatedAt: str
+    groundTruthSummary: Dict[str, Any]
+    baselineMetrics: EvaluationMetricsBlock
+    postImprovementMetrics: EvaluationMetricsBlock
+    deltaImprovements: Dict[str, Any]
+    caseByCaseResults: List[Dict[str, Any]]
+
+
+# -----------------------------------------------------------------------------
+# 8. Round 3 Improvement 3: Evidence-Backed Dependency Map & Version Comparison
+# -----------------------------------------------------------------------------
+class DependencyGraphNodeSchema(BaseModel):
+    nodeId: str
+    label: str
+    category: str  # component | team_or_external | task_or_decision | person | unknown_owner_gap
+    status: str  # source_supported | inferred | unknown_gap | blocked
+    owner: Optional[str] = None
+    evidenceSourceIds: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DependencyGraphEdgeSchema(BaseModel):
+    edgeId: str
+    sourceNodeId: str
+    targetNodeId: str
+    relationship: str  # BLOCKS | DEPENDS_ON | OWNED_BY | UNASSIGNED_OWNER_GAP | REQUIRES_RUNBOOK | SUPERSEDES
+    supportStatus: str  # source_supported | inferred
+    severity: str = "high"
+    evidenceSourceIds: List[str] = Field(default_factory=list)
+    evidenceClaimIds: List[str] = Field(default_factory=list)
+    explanation: str = ""
+
+
+class DependencyMapResponse(BaseModel):
+    handoverId: str
+    nodes: List[DependencyGraphNodeSchema]
+    edges: List[DependencyGraphEdgeSchema]
+    summary: Dict[str, Any]
+
+
+class HandoverVersionBriefSchema(BaseModel):
+    versionNumber: int
+    changeSummary: str
+    createdBy: str
+    createdAt: datetime
+    claimsCount: int = 0
+
+
+class ClaimVersionDiffSchema(BaseModel):
+    claimCode: str
+    claimType: str
+    changeTypes: List[str]
+    beforeText: Optional[str] = None
+    afterText: Optional[str] = None
+    beforeRationale: Optional[str] = None
+    afterRationale: Optional[str] = None
+    beforeStatus: Optional[str] = None
+    afterStatus: Optional[str] = None
+    beforeReviewState: Optional[str] = None
+    afterReviewState: Optional[str] = None
+    beforeOwner: Optional[str] = None
+    afterOwner: Optional[str] = None
+    reviewerNotes: Optional[str] = None
+    evidenceSourceIds: List[str] = Field(default_factory=list)
+
+
+class HandoverVersionDiffResponse(BaseModel):
+    handoverId: str
+    baseVersion: int
+    targetVersion: int
+    baseChangeSummary: str
+    targetChangeSummary: str
+    availableVersions: List[HandoverVersionBriefSchema]
+    summaryMetrics: Dict[str, int]
+    claimDiffs: List[ClaimVersionDiffSchema]

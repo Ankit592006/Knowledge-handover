@@ -7,6 +7,7 @@ An agentic, evidence-linked, contradiction-aware, and human-approved software pr
 - **Live Backend API (Render)**: `https://kh-backend-z2o3.onrender.com` ([Swagger UI `/docs`](https://kh-backend-z2o3.onrender.com/docs) · [Health Check `/api/v1/health`](https://kh-backend-z2o3.onrender.com/api/v1/health))
 - **Live Frontend Web App (Render)**: `https://kh-frontend.onrender.com`
 - **GitHub Repository**: `https://github.com/Ankit592006/Knowledge-handover.git`
+- **Round 3 Improvements & Benchmark**: [Round 3 Implementation & Benchmark Report](docs/ROUND3_IMPROVEMENTS_AND_BENCHMARK.md) · [Committed Benchmark JSON](data/benchmarks/round3_evaluation_results.json)
 - **Hackathon Final Report**: [PDF Report](Knowledge_Handover_Hackathon_Final_Report.pdf) · [Print-Ready HTML Dossier](Knowledge_Handover_Hackathon_Final_Report.html) · [Markdown Report](docs/Knowledge_Handover_Hackathon_Final_Report.md)
 
 ---

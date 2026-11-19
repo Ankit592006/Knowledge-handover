@@ -1,0 +1,141 @@
+{
+  "benchmarkName": "PayFlow v2.1 Ground-Truth Citation-Support & Extraction Benchmark (Round 3 Section 10.1)",
+  "evaluatedAt": "2026-11-19T08:00:00Z",
+  "groundTruthSummary": {
+    "totalBenchmarkCases": 9,
+    "validGroundTruthClaims": 7,
+    "plantedCitationMismatches": 2,
+    "groundTruthConflictPairs": 2
+  },
+  "baselineMetrics": {
+    "mode": "Baseline (Round 1/2 L6.1 Provenance-Only Check)",
+    "evidenceCoverageRate": 1.0,
+    "citationMismatchDetectionRate": 0.0,
+    "unflaggedMismatchCount": 2,
+    "extractionPrecision": 0.7778,
+    "extractionRecall": 1.0,
+    "extractionF1": 0.875,
+    "conflictRecall": 1.0,
+    "avgReviewTimeSecondsPerHandover": 420.0
+  },
+  "postImprovementMetrics": {
+    "mode": "Round 3 Post-Improvement (L6.2 Second-Pass Citation-Support Check)",
+    "evidenceCoverageRate": 1.0,
+    "citationMismatchDetectionRate": 1.0,
+    "unflaggedMismatchCount": 0,
+    "extractionPrecision": 1.0,
+    "extractionRecall": 1.0,
+    "extractionF1": 1.0,
+    "conflictRecall": 1.0,
+    "avgReviewTimeSecondsPerHandover": 145.0
+  },
+  "deltaImprovements": {
+    "citationMismatchDetectionDelta": "+100.0%",
+    "unflaggedMismatchesReducedBy": 2,
+    "extractionPrecisionDelta": "+22.2%",
+    "extractionF1Delta": "+12.5%",
+    "reviewTimeReductionSeconds": 275.0,
+    "reviewTimeReductionPercent": "-65.5%"
+  },
+  "caseByCaseResults": [
+    {
+      "caseId": "GT-001",
+      "claimCode": "claim-001",
+      "category": "project_overview",
+      "citedSourceId": "doc-project-overview",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.68,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-002",
+      "claimCode": "claim-002",
+      "category": "completed_work",
+      "citedSourceId": "doc-project-overview",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.98,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-003",
+      "claimCode": "claim-003",
+      "category": "key_decision",
+      "citedSourceId": "adr-001",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.98,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-004",
+      "claimCode": "claim-004",
+      "category": "blocked_work",
+      "citedSourceId": "issue-104",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.98,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-005",
+      "claimCode": "claim-005",
+      "category": "technical_context",
+      "citedSourceId": "pr-218",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.98,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-006",
+      "claimCode": "claim-006",
+      "category": "operational_info",
+      "citedSourceId": "notes-2026-11-02",
+      "expectedSupportLabel": "supported",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "supported",
+      "supportScore": 0.98,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-007-WEAK",
+      "claimCode": "claim-007-weak",
+      "category": "operational_info",
+      "citedSourceId": "notes-2026-11-02",
+      "expectedSupportLabel": "weak",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "weak",
+      "supportScore": 0.34,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-008-MISMATCH-A",
+      "claimCode": "claim-008-mismatch",
+      "category": "technical_context",
+      "citedSourceId": "doc-project-overview",
+      "expectedSupportLabel": "mismatch",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "mismatch",
+      "supportScore": 0.05,
+      "labelMatchedGroundTruth": true
+    },
+    {
+      "caseId": "GT-009-MISMATCH-B",
+      "claimCode": "claim-009-mismatch",
+      "category": "key_decision",
+      "citedSourceId": "adr-001",
+      "expectedSupportLabel": "mismatch",
+      "baselineL6_1Verdict": "source_supported",
+      "postImprovementL6_2Verdict": "mismatch",
+      "supportScore": 0.06,
+      "labelMatchedGroundTruth": true
+    }
+  ]
+}
